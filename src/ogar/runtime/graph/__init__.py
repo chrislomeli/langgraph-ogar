@@ -1,10 +1,16 @@
 """
-graph.goals — Intake graph: control → consult → apply_and_validate → loop.
+runtime.graph — OGAR orchestration graph and subgraphs.
+
+Outer graph:  intake → planner → tool_select → execute → verify → decide → finalize
+Subgraphs:    intake/ (goals + requirements elicitation)
 """
 
-from .graph_builder import build_graph, IntakeState
+from .ogar_graph import build_ogar_graph, OGARState
+from .intake import build_intake_graph, IntakeState
 
 __all__ = [
+    "build_ogar_graph",
+    "OGARState",
+    "build_intake_graph",
     "IntakeState",
-    "build_graph",
 ]

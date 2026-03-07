@@ -5,7 +5,7 @@ Run the intake graph end-to-end.
 Right now ask_the_human() and call_the_ai() are stubs that return
 canned data.  Swap them for real I/O and an LLM when ready.
 """
-from ogar.runtime.graph import build_graph
+from ogar.runtime.graph import build_intake_graph as build_graph
 
 
 def main():

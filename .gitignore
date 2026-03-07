@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+.idea/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+data/
+src/data/
+src/ogar/scripts/data/
+.env
