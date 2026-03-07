@@ -1,0 +1,10 @@
+name: symbolic-music
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - openssl
+  - pip
+  - pip:
+    - -e .

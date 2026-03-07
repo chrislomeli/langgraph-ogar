@@ -1,0 +1,164 @@
+# MCP-Ready Tool Architecture (Transport-Agnostic)
+
+This is a clean, MCP-ready, transport-agnostic skeleton using:
+
+- ✅ Pydantic models as canonical schema
+- ✅ Local in-process execution
+- ✅ JSON-serializable contracts
+- ✅ Swappable client layer later
+
+No MCP server yet — but fully compatible with future MCP exposure.
+
+---
+
+# Design Goals
+
+We want:
+
+1. Stable tool contracts
+2. Schema validation (input and output)
+3. Local direct execution during development
+4. Easy future migration to MCP (or gRPC / HTTP)
+5. No transport coupling in graph logic
+
+The core idea:
+
+**LangGraph depends only on a ToolClient interface.**
+
+---
+
+# Architecture Overview
+```
+LangGraph Node
+↓
+ToolClient.call(name, args)
+↓
+LocalToolClient (dev)
+↓
+ToolRegistry
+↓
+ToolSpec (schema + handler)
+↓
+Pure Python Function
+```
+
+Later:
+
+```
+LangGraph Node
+↓
+ToolClient.call(name, args)
+↓
+McpToolClient
+↓
+MCP Transport
+↓
+MCP Server
+```
+
+Graph logic does not change.
+
+---
+
+# Step 1 — Tool Contract
+
+Each tool has:
+
+- name
+- description
+- input_model (Pydantic)
+- output_model (Pydantic)
+- handler function
+
+This defines the canonical contract.
+
+---
+
+# Step 2 — Define Tools with Pydantic
+
+Use Pydantic models as the single source of truth.
+
+Benefits:
+- Validation
+- JSON serialization
+- Automatic JSON Schema export (`model_json_schema()`)
+- MCP compatibility later
+
+---
+
+# Step 3 — Tool Registry
+
+A registry maps tool name → ToolSpec.
+
+This enables:
+- Discovery
+- Centralized registration
+- Future dynamic exposure via MCP
+
+---
+
+# Step 4 — Local Tool Client
+
+LocalToolClient:
+
+- Validates inputs
+- Calls handler
+- Validates outputs
+- Returns JSON-safe result
+
+This enforces boundary discipline.
+
+---
+
+# MCP Compatibility
+
+When ready to migrate:
+
+- Use `input_model.model_json_schema()` for MCP input schema
+- Use `output_model.model_json_schema()` for output schema
+- Expose ToolSpecs via an MCP server adapter
+
+No rewrite required.
+
+---
+
+# Design Rules
+
+1. Inputs and outputs must be JSON-serializable
+2. No passing Python objects across boundary
+3. Tool handlers contain internal logic only
+4. LangGraph only talks to ToolClient
+5. Transport is a configuration decision
+
+---
+
+# Future Extension Points
+
+You can later add:
+
+- McpToolClient
+- HttpToolClient
+- gRPC adapter
+- Logging wrapper
+- Metrics wrapper
+- Retry wrapper
+- Authorization wrapper
+
+Without touching LangGraph logic.
+
+---
+
+# Summary
+
+You now have:
+
+- Deterministic tool contracts
+- Schema validation
+- JSON-safe boundary
+- Clean abstraction layer
+- Transport independence
+- MCP portability
+
+This is production-grade architecture that scales from local dev to distributed deployment.
+
+

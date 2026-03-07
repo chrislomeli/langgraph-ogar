@@ -1,0 +1,58 @@
+{
+  "pid": "proj_demo",
+  "title": "Agentic Project Planner Demo",
+  "non_goals": [],
+  "goals": {
+    "g_demo_tool": {
+      "gid": "g_demo_tool",
+      "statement": "Build a working single-user agentic project planning tool.",
+      "success_metrics": [
+        "Create/edit/retrieve a project plan via CLI",
+        "Pause and resume execution after hours/days",
+        "Generate stale/blocker/orphan uncertainty reports"
+      ],
+      "priority": 0,
+      "status": "active"
+    },
+    "g_consistency": {
+      "gid": "g_consistency",
+      "statement": "Enforce consistent collaboration workflow via schema and deterministic gating.",
+      "success_metrics": [
+        "Project-level uncertainty register",
+        "Deterministic validators catch missing links/fields"
+      ],
+      "priority": 1,
+      "status": "active"
+    }
+  },
+  "requirements": {
+    "r_interactive_planning": {
+      "rid": "r_interactive_planning",
+      "type": "functional",
+      "statement": "User can outline goals and collaborate with system to produce a plan.",
+      "acceptance_criteria": [
+        "System drafts work items from goals",
+        "System asks clarification questions when blockers detected"
+      ],
+      "source_goal_ids": [
+        "g_demo_tool",
+        "g_consistency"
+      ],
+      "status": "draft"
+    },
+    "r_persistence": {
+      "rid": "r_persistence",
+      "type": "functional",
+      "statement": "Project plan is persisted and can be retrieved and modified.",
+      "acceptance_criteria": [
+        "Create → store → retrieve yields equivalent object"
+      ],
+      "source_goal_ids": [
+        "g_demo_tool"
+      ],
+      "status": "draft"
+    }
+  },
+  "uncertainties": {},
+  "work_items": {}
+}
