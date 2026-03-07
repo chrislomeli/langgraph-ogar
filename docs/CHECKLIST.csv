@@ -1,0 +1,17 @@
+Status,Capability,Type,Notes
+_,interrupt / resume (HITL),base,maybe add an approval at the end of each ReAct iteration?
+_,tool calling,base,have a basic stub
+_,subgraphs,base,
+x,conditional routing (conditional_edges),base,
+_,Command for dynamic routing,base,
+_,state schema definition (TypedDict / Annotated),base,
+_,custom reducer on a state key,base,
+_,checkpointer (memory across turns),base,
+_,thread_id / config passing,base,
+_,streaming (stream_mode values/updates),base,
+_,Send API (dynamic parallel branching),advanced,
+_,map-reduce pattern,advanced,
+_,multi-agent handoff,advanced,
+_,inject runtime config (RunnableConfig),advanced,
+_,node retry / error handling,advanced,
+_,input / output schema scoping,advanced,
