@@ -34,10 +34,53 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, TypedDict
 
+from pydantic import BaseModel, Field
 from langgraph.graph import StateGraph, START, END
 
 from ogar.domain.models.project import Project
 from ogar.domain.consult import AskHuman, CallAI
+from ogar.commons.results import NodeResult, validated_node, handle_error
+
+
+# ── Input schemas (Pydantic, extra="ignore") ─────────────────────────
+
+class PlannerInput(BaseModel):
+    model_config = {"extra": "ignore", "arbitrary_types_allowed": True}
+    project: Optional[Project] = None
+    audit_log: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class ToolSelectInput(BaseModel):
+    model_config = {"extra": "ignore"}
+    plan_steps: List[Dict[str, Any]] = Field(default_factory=list)
+    current_step_index: int = 0
+
+
+class ExecuteInput(BaseModel):
+    model_config = {"extra": "ignore"}
+    tool_request: Optional[Dict[str, Any]] = None
+    audit_log: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class VerifyInput(BaseModel):
+    model_config = {"extra": "ignore"}
+    tool_response: Optional[Dict[str, Any]] = None
+    plan_steps: List[Dict[str, Any]] = Field(default_factory=list)
+    current_step_index: int = 0
+
+
+class DecideInput(BaseModel):
+    model_config = {"extra": "ignore"}
+    plan_steps: List[Dict[str, Any]] = Field(default_factory=list)
+    current_step_index: int = 0
+    tool_error: Optional[str] = None
+    retry_count: int = 0
+
+
+class FinalizeInput(BaseModel):
+    model_config = {"extra": "ignore"}
+    decision: str = "done"
+    audit_log: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 # ── State ────────────────────────────────────────────────────────────
@@ -73,6 +116,9 @@ class OGARState(TypedDict):
     # ── Decision routing ──
     decision: str                             # "next_step", "revise_plan", "done", "fail"
 
+    # ── Validation ──
+    node_result: Optional[NodeResult]
+
 
 # ── Intake (subgraph) ───────────────────────────────────────────────
 
@@ -89,7 +135,7 @@ def _build_intake_node(ask_human=None, call_ai=None):
 
 # ── Planner (wired to PlanOrchestrator) ──────────────────────────────
 
-def _make_planner_node(registry=None):
+def  _make_planner_node(registry=None):
     """
     Factory: return a planner node, optionally with a custom ScopeRegistry.
 
@@ -99,7 +145,8 @@ def _make_planner_node(registry=None):
         graph = build_ogar_graph(registry=registry)
     """
 
-    def planner(state: OGARState) -> dict:
+    @validated_node(PlannerInput)
+    def planner(inp: PlannerInput, state: dict) -> dict:
         """
         Produce and execute a plan from the project's goals and requirements.
 
@@ -113,8 +160,8 @@ def _make_planner_node(registry=None):
         from ogar.domain.services.plan_proposer import ProjectPlanProposer
         from ogar.domain.services.plan_executors import build_default_registry
 
-        project = state["project"]
-        audit = list(state.get("audit_log", []))
+        project = inp.project
+        audit = list(inp.audit_log)
 
         if not project or not project.goals:
             return {
@@ -122,6 +169,7 @@ def _make_planner_node(registry=None):
                 "current_step_index": 0,
                 "run_status": "running",
                 "audit_log": audit + [{"event": "plan_skipped", "reason": "no goals"}],
+                "node_result": NodeResult.success(),
             }
 
         # Collect orchestrator events into the audit log
@@ -167,6 +215,7 @@ def _make_planner_node(registry=None):
             "current_step_index": len(steps),  # all steps already executed
             "run_status": "running",
             "audit_log": audit,
+            "node_result": NodeResult.success(),
         }
 
     return planner
@@ -174,7 +223,8 @@ def _make_planner_node(registry=None):
 
 # ── Tool selection / gating (stub) ──────────────────────────────────
 
-def tool_select(state: OGARState) -> dict:
+@validated_node(ToolSelectInput)
+def tool_select(inp: ToolSelectInput, state: dict) -> dict:
     """
     Pick the next tool call based on current plan step.
     Apply gating policies (risk, budget, environment).
@@ -187,13 +237,10 @@ def tool_select(state: OGARState) -> dict:
       - Checks risk level of the tool
       - May block the call and route to human approval
     """
-    steps = state.get("plan_steps", [])
-    idx = state.get("current_step_index", 0)
+    if inp.current_step_index >= len(inp.plan_steps):
+        return {"tool_request": None, "decision": "done", "node_result": NodeResult.success()}
 
-    if idx >= len(steps):
-        return {"tool_request": None, "decision": "done"}
-
-    step = steps[idx]
+    step = inp.plan_steps[inp.current_step_index]
     return {
         "tool_request": {
             "tool_name": step["tool"],
@@ -202,12 +249,14 @@ def tool_select(state: OGARState) -> dict:
         },
         "tool_error": None,
         "retry_count": 0,
+        "node_result": NodeResult.success(),
     }
 
 
 # ── Execute (stub) ──────────────────────────────────────────────────
 
-def execute(state: OGARState) -> dict:
+@validated_node(ExecuteInput)
+def execute(inp: ExecuteInput, state: dict) -> dict:
     """
     Call the selected tool and capture the response.
 
@@ -221,9 +270,9 @@ def execute(state: OGARState) -> dict:
       - Error classification (transient vs permanent)
       - Bounded retries
     """
-    req = state.get("tool_request")
+    req = inp.tool_request
     if req is None:
-        return {"tool_response": None}
+        return {"tool_response": None, "node_result": NodeResult.success()}
 
     # STUB: pretend every tool call succeeds
     return {
@@ -234,15 +283,17 @@ def execute(state: OGARState) -> dict:
             "result": f"Stub result for {req['tool_name']}",
         },
         "tool_error": None,
-        "audit_log": state.get("audit_log", []) + [
+        "audit_log": list(inp.audit_log) + [
             {"event": "tool_executed", "tool": req["tool_name"], "success": True}
         ],
+        "node_result": NodeResult.success(),
     }
 
 
 # ── Verify (stub) ───────────────────────────────────────────────────
 
-def verify(state: OGARState) -> dict:
+@validated_node(VerifyInput)
+def verify(inp: VerifyInput, state: dict) -> dict:
     """
     Check the tool response against expectations.
 
@@ -254,21 +305,22 @@ def verify(state: OGARState) -> dict:
       - Classifies errors (transient → retry, permanent → fail)
       - Updates step status
     """
-    resp = state.get("tool_response")
+    resp = inp.tool_response
     if resp and resp.get("success"):
         # Mark current step done
-        steps = list(state.get("plan_steps", []))
-        idx = state.get("current_step_index", 0)
+        steps = list(inp.plan_steps)
+        idx = inp.current_step_index
         if idx < len(steps):
             steps[idx] = {**steps[idx], "status": "done"}
-        return {"plan_steps": steps}
+        return {"plan_steps": steps, "node_result": NodeResult.success()}
 
-    return {}
+    return {"node_result": NodeResult.success()}
 
 
 # ── Decide (router node) ────────────────────────────────────────────
 
-def decide(state: OGARState) -> dict:
+@validated_node(DecideInput)
+def decide(inp: DecideInput, state: dict) -> dict:
     """
     Look at where we are in the plan and decide what's next.
 
@@ -278,33 +330,31 @@ def decide(state: OGARState) -> dict:
       - "done"         → all steps complete, go to finalize
       - "fail"         → budget/retries exhausted, go to finalize
     """
-    steps = state.get("plan_steps", [])
-    idx = state.get("current_step_index", 0)
-    error = state.get("tool_error")
-
     # If error and too many retries → fail
-    if error and state.get("retry_count", 0) >= 3:
-        return {"decision": "fail", "run_status": "failed"}
+    if inp.tool_error and inp.retry_count >= 3:
+        return {"decision": "fail", "run_status": "failed", "node_result": NodeResult.success()}
 
     # If error → revise plan (in production, could retry first)
-    if error:
-        return {"decision": "revise_plan"}
+    if inp.tool_error:
+        return {"decision": "revise_plan", "node_result": NodeResult.success()}
 
     # If all steps done → done
-    all_done = all(s.get("status") == "done" for s in steps) if steps else True
-    if idx >= len(steps) or (idx >= len(steps) - 1 and all_done):
-        return {"decision": "done"}
+    all_done = all(s.get("status") == "done" for s in inp.plan_steps) if inp.plan_steps else True
+    if inp.current_step_index >= len(inp.plan_steps) or (inp.current_step_index >= len(inp.plan_steps) - 1 and all_done):
+        return {"decision": "done", "node_result": NodeResult.success()}
 
     # Otherwise → next step
     return {
         "decision": "next_step",
-        "current_step_index": idx + 1,
+        "current_step_index": inp.current_step_index + 1,
+        "node_result": NodeResult.success(),
     }
 
 
 # ── Finalize ─────────────────────────────────────────────────────────
 
-def finalize(state: OGARState) -> dict:
+@validated_node(FinalizeInput)
+def finalize(inp: FinalizeInput, state: dict) -> dict:
     """
     Wrap up the run. Produce summary, save final state.
 
@@ -316,16 +366,25 @@ def finalize(state: OGARState) -> dict:
       - Emits observability events
       - Produces audit trail
     """
-    status = "done" if state.get("decision") == "done" else "failed"
+    status = "done" if inp.decision == "done" else "failed"
     return {
         "run_status": status,
-        "audit_log": state.get("audit_log", []) + [
+        "audit_log": list(inp.audit_log) + [
             {"event": "run_finalized", "status": status}
         ],
+        "node_result": NodeResult.success(),
     }
 
 
 # ── Router ───────────────────────────────────────────────────────────
+
+def _route_after_node(state: OGARState) -> str:
+    """Check node_result first — route to handle_error on failure."""
+    result = state.get("node_result")
+    if result and not result.ok:
+        return "handle_error"
+    return "continue"
+
 
 def _route_after_decide(state: OGARState) -> str:
     """Route based on the decide node's decision field."""
@@ -375,16 +434,23 @@ def build_ogar_graph(
     g.add_node("verify", verify)
     g.add_node("decide", decide)
     g.add_node("finalize", finalize)
+    g.add_node("handle_error", handle_error)
 
-    # ── Edges ──
+    # ── Edges — standard routing checks node_result after each node ──
     g.add_edge(START, "intake")
-    g.add_edge("intake", "planner")
-    g.add_edge("planner", "tool_select")
-    g.add_edge("tool_select", "execute")
-    g.add_edge("execute", "verify")
-    g.add_edge("verify", "decide")
+    g.add_conditional_edges("intake", _route_after_node,
+                            {"continue": "planner", "handle_error": "handle_error"})
+    g.add_conditional_edges("planner", _route_after_node,
+                            {"continue": "tool_select", "handle_error": "handle_error"})
+    g.add_conditional_edges("tool_select", _route_after_node,
+                            {"continue": "execute", "handle_error": "handle_error"})
+    g.add_conditional_edges("execute", _route_after_node,
+                            {"continue": "verify", "handle_error": "handle_error"})
+    g.add_conditional_edges("verify", _route_after_node,
+                            {"continue": "decide", "handle_error": "handle_error"})
     g.add_conditional_edges("decide", _route_after_decide,
                             ["tool_select", "planner", "finalize"])
     g.add_edge("finalize", END)
+    g.add_edge("handle_error", END)
 
     return g.compile()

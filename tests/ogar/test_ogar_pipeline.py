@@ -29,6 +29,7 @@ def _invoke_ogar(pid="test_proj", **overrides):
         "run_status": "running",
         "audit_log": [],
         "decision": "",
+        "node_result": None,
         **overrides,
     }
     return graph.invoke(inputs)
@@ -39,7 +40,9 @@ class TestOGARHappyPath:
 
     def test_reaches_done(self):
         out = _invoke_ogar()
+        print(out)
         assert out["run_status"] == "done"
+
 
     def test_project_populated(self):
         out = _invoke_ogar()

@@ -12,7 +12,6 @@ All phases use stubs right now. Replace them one at a time:
 """
 from ogar.runtime.graph import build_ogar_graph
 
-
 def main():
     graph = build_ogar_graph()
 
@@ -33,6 +32,7 @@ def main():
         "run_status": "running",
         "audit_log": [],
         "decision": "",
+        "node_result": None,
     })
 
     print("\n=== OGAR Run Complete ===")

@@ -32,6 +32,7 @@ def main():
         "human_reply": None,
         "patch": None,
         "validation_errors": [],
+        "node_result": None,
     })
 
     print("\n=== ReAct Intake Complete ===")

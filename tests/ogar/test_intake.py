@@ -20,6 +20,7 @@ def _invoke_intake(pid="test_proj", **overrides):
         "human_reply": None,
         "patch": None,
         "validation_errors": [],
+        "node_result": None,
         **overrides,
     }
     return graph.invoke(inputs)
@@ -71,5 +72,6 @@ class TestIntakeEdgeCases:
     def test_output_contains_all_state_keys(self):
         out = _invoke_intake()
         expected_keys = {"pid", "project", "stage", "questions",
-                         "human_reply", "patch", "validation_errors"}
+                         "human_reply", "patch", "validation_errors",
+                         "node_result"}
         assert expected_keys.issubset(set(out.keys()))

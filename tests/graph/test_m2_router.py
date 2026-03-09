@@ -9,7 +9,7 @@ Tests verify:
 
 YOUR JOB:
   - Implement src/graph/nodes/intent_router.py
-  - Update src/graph/graph_builder.py to add router and conditional edges
+  - Update src/graph/intake_graph.py to add router and conditional edges
   - Make these tests pass: pytest tests/graph/test_m2_router.py -v
 """
 
