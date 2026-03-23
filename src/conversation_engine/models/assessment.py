@@ -6,7 +6,7 @@ of the knowledge graph.
 """
 from __future__ import annotations
 
-from typing import List, Literal
+from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
 from conversation_engine.models.rules import Severity
@@ -62,4 +62,13 @@ class Assessment(BaseModel):
     confidence: Confidence = Field(
         ...,
         description="AI confidence level in this assessment"
+    )
+    
+    conversation_turn_id: Optional[str] = Field(
+        None,
+        description="ID of the conversation turn that addressed this assessment"
+    )
+    resolved: bool = Field(
+        False,
+        description="Whether this assessment has been resolved in conversation"
     )

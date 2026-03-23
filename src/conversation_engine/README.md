@@ -181,31 +181,169 @@ query = GraphQueryPattern(
 )
 ```
 
+## Conversation Graph (`graph/`)
+
+A **domain-agnostic** LangGraph conversation loop.  All domain logic is
+injected via the `ConversationContext` protocol — the loop itself has no
+knowledge of graphs, rules, or ontologies.
+
+### Architecture
+
+```
+┌──────────────────────────────────────────────────┐
+│  ConversationContext (Protocol)                   │
+│  ── validate(prior_findings) → ValidationResult  │
+│  ── format_finding_summary(findings) → str       │
+│  ── get_domain_state() → dict                    │
+└────────────────────┬─────────────────────────────┘
+                     │  implements
+       ┌─────────────┴──────────────┐
+       │ ArchitecturalOntologyContext│  ← concrete adapter
+       │   KnowledgeGraph           │
+       │   IntegrityRule[]          │
+       │   RuleEvaluator            │
+       └────────────────────────────┘
+```
+
+### Current topology
+
+```
+START → validate → reason → respond → route
+route → validate   (open findings remain + turns < max)
+route → END        (all clear, max turns, or error/complete)
+```
+
+### Files
+
+- **`graph/context.py`** — `ConversationContext` (Protocol), `Finding`, `ValidationResult`
+- **`graph/architectural_context.py`** — `ArchitecturalOntologyContext` (concrete implementation)
+- **`graph/state.py`** — `ConversationState` (TypedDict), `ConversationInput`, `ConversationOutput`
+- **`graph/nodes.py`** — `validate`, `reason` (stub), `respond` (stub) — all domain-agnostic
+- **`graph/builder.py`** — `build_conversation_graph()` + `route_after_respond` router
+
+### Key design decisions
+
+- **Protocol, not ABC** — structural subtyping; any class with the right methods satisfies the contract
+- **`Finding` is a frozen dataclass** — domain-agnostic; the loop never sees `Assessment`
+- **Nodes never import domain types** — they call `context.validate()` and `context.format_finding_summary()`
+- **Domain state is opaque** — `get_domain_state()` returns a dict the loop stores but never inspects
+
+### Key LangGraph concepts used
+
+- **`StateGraph(ConversationState)`** — graph typed by the state schema
+- **`add_messages` reducer** — on `messages` field, LangGraph appends instead of replacing
+- **Partial state returns** — each node returns only the keys it changes
+- **`add_conditional_edges`** — router function returns next node name or `"__end__"`
+
+### Usage (architectural ontology)
+
+```python
+from conversation_engine.graph import (
+    build_conversation_graph,
+    ArchitecturalOntologyContext,
+)
+from conversation_engine.fixtures import create_graph_with_gaps
+from conversation_engine.models.rules import IntegrityRule
+
+context = ArchitecturalOntologyContext(
+    graph=create_graph_with_gaps(),
+    rules=[your_rules],
+)
+graph = build_conversation_graph()
+result = graph.invoke({
+    "context": context,
+    "session_id": "session-1",
+    "findings": [],
+    "messages": [],
+    "current_turn": 0,
+    "status": "running",
+})
+```
+
+### Usage (custom domain — no architectural imports needed)
+
+```python
+from conversation_engine.graph import (
+    build_conversation_graph,
+    ConversationContext,
+    Finding,
+    ValidationResult,
+)
+
+class MyCodeReviewContext:
+    def validate(self, prior_findings):
+        # run your own linter / scanner / whatever
+        return ValidationResult(findings=[...])
+
+    def format_finding_summary(self, findings):
+        return f"{len(findings)} lint issues found."
+
+    def get_domain_state(self):
+        return {"files_scanned": 42}
+
+graph = build_conversation_graph()
+result = graph.invoke({
+    "context": MyCodeReviewContext(),
+    "session_id": "review-1",
+    "findings": [],
+    "messages": [],
+    "current_turn": 0,
+    "status": "running",
+})
+```
+
+---
+
+## Research Files (`research/files/`)
+
+These files were produced during a design session with Claude Sonnet. They represent a **more elaborate target architecture** with 7 nodes, an interruption policy, mutation review protocol, and anchored exchange tracking.
+
+They are kept as **design reference only** — not wired into the working code.
+
+### Why we care about them
+
+The research files solve real problems we will face as the conversation engine matures:
+
+- **`AnchoredExchange` + `BeliefChange`** — Track which conversation turns actually changed the knowledge graph. Without this, we can't explain *why* the graph looks the way it does after a multi-turn session.
+- **`InterruptionPolicy`** — A compound policy (confidence threshold, assessment type triggers, autonomous turn limits) that decides when to pause and ask the human. Without this, the agent either always asks or never asks.
+- **`MutationReviewer`** (ABC + `AutoApproveReviewer` stub) — Interface for reviewing proposed graph mutations before committing them. Separates "what the agent wants to do" from "what actually happens."
+- **`integrate` vs `mutate_graph` as separate nodes** — Lets you validate a proposed mutation before committing it to the graph.
+- **Router with priority-ordered exits** — Error → interrupted → complete/hand_off → max_turns → continue.
+
+The architecture is sound but front-loads too much design for where we are today. Each concept should be introduced only when the previous layer is working and tested.
+
+---
+
+## Roadmap
+
+| # | Step | Status |
+|---|------|--------|
+| 1 | Basic loop: validate → reason → respond → route | ✅ Done |
+| 2 | Separate concerns: `ConversationContext` protocol + injectable domains | ✅ Done |
+| 3 | Swap `reason` stub for real LLM | Next |
+| 4 | Wire `GraphQueryPattern` execution as LangGraph tools | Pending |
+| 5 | Add `InterruptionPolicy` (pure logic, no LLM) | Pending |
+| 6 | Add `integrate` + `mutate_graph` + `MutationReviewer` | Pending |
+| 7 | Add `AnchoredExchange` tracking | Pending |
+
+Each step earns its keep when the previous one is working. The research files are a good roadmap — just not code to copy-paste.
+
+---
+
 ## Testing
 
-Run the test suite:
+Run the full test suite (110 tests):
 
 ```bash
 /opt/miniforge3/envs/langgraph-sandbox/bin/python -m pytest tests/conversation_engine/ -v
 ```
 
-All models are validated with comprehensive tests covering:
-- Node creation and serialization
-- Traceability relationships
-- Integrity rule definitions
-- Query pattern specifications
-- Assessment output formats
-- Example data loading
-
-## Next Steps
-
-This model layer provides the foundation for:
-
-1. **Graph storage**: Persist nodes and edges in a graph database
-2. **Validation engine**: Evaluate integrity rules against graph state
-3. **Query engine**: Execute query patterns to detect gaps and issues
-4. **AI reasoning**: Enable AI to assess architectural completeness
-5. **Conversation orchestration**: Build the conversation subgraph that uses these models
+Test coverage:
+- **Models** — Node creation, serialization, traceability, rules, queries, assessments
+- **Storage** — KnowledgeGraph CRUD, indexes, GraphQueries (neighbors, orphans, paths, coverage)
+- **Validation** — RuleEvaluator with all rule types, fixtures, severity filtering
+- **Conversation graph** — Node unit tests, router logic, full graph integration (18 tests)
+- **Domain agnosticism** — Fake context proves the loop works with arbitrary domains (3 tests)
 
 ## Design Rationale
 
