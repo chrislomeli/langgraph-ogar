@@ -62,3 +62,6 @@ class ConversationState(TypedDict):
 
     # Node validation — populated by validated_node decorator or nodes directly
     node_result: Optional[NodeResult]
+
+    # Pre-flight LLM validation — set to True after first successful pass
+    preflight_passed: bool

@@ -24,6 +24,10 @@ from conversation_engine.infrastructure.llm.protocols import (
     LLMResponse,
 )
 from conversation_engine.infrastructure.llm.stub import call_llm_stub
+from conversation_engine.infrastructure.llm.openai_adapter import (
+    make_openai_llm,
+    OpenAICallLLM,
+)
 from conversation_engine.infrastructure.llm.validator import (
     LLMValidator,
     LLMValidatorReport,
@@ -37,6 +41,8 @@ __all__ = [
     "LLMRequest",
     "LLMResponse",
     "call_llm_stub",
+    "make_openai_llm",
+    "OpenAICallLLM",
     "LLMValidator",
     "LLMValidatorReport",
     "ValidationQuiz",

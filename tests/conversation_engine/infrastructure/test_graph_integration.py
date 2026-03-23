@@ -7,7 +7,7 @@ Covers:
 - Middleware composition in real conversation runs
 - ErrorHandlingMiddleware replaces handle_error node
 - LLM injectable via state["llm"] (stub)
-- Pre-flight LLM validation: smart LLM passes, dumb LLM raises
+- Pre-flight LLM validation as a graph node
 """
 import pytest
 
@@ -18,7 +18,6 @@ from conversation_engine.graph.context import (
 )
 from conversation_engine.graph.builder import (
     build_conversation_graph,
-    LLMPreflightError,
     MAX_TURNS,
 )
 from conversation_engine.infrastructure.interceptors import (
@@ -42,7 +41,7 @@ from conversation_engine.infrastructure.llm import (
 # ── Fake contexts ───────────────────────────────────────────────────
 
 class _CleanContext:
-    """Context with no findings — graph exits in one pass."""
+    """Context with no findings and no preflight quiz — graph exits in one pass."""
 
     def validate(self, prior_findings):
         return ValidationResult(findings=[])
@@ -113,6 +112,36 @@ class _FailingContext:
         return []
 
 
+class _PreflightContext:
+    """Context with a preflight quiz — for testing pre-flight node."""
+
+    def __init__(self, system_prompt_text="The system has goal and requirement types."):
+        self._system_prompt = system_prompt_text
+
+    def validate(self, prior_findings):
+        return ValidationResult(findings=[])
+
+    def format_finding_summary(self, findings):
+        return "All clear."
+
+    def get_domain_state(self):
+        return {}
+
+    @property
+    def system_prompt(self) -> str:
+        return self._system_prompt
+
+    @property
+    def preflight_quiz(self) -> list:
+        return [
+            ValidationQuiz(
+                question="What node types exist?",
+                required_concepts=["goal", "requirement"],
+                weight=1.0,
+            ),
+        ]
+
+
 def _make_state(ctx, llm=None):
     return {
         "context": ctx,
@@ -123,6 +152,7 @@ def _make_state(ctx, llm=None):
         "current_turn": 0,
         "status": "running",
         "node_result": None,
+        "preflight_passed": False,
     }
 
 
@@ -139,7 +169,7 @@ class TestInterceptorsInGraph:
         result = graph.invoke(state)
 
         snap = mi.snapshot()
-        # All three nodes should have been called at least once
+        assert "preflight" in snap
         assert "validate" in snap
         assert "reason" in snap
         assert "respond" in snap
@@ -204,7 +234,6 @@ class TestErrorRoutingInGraph:
         assert result["status"] == "error"
         assert result["node_result"].error.code == "NODE_EXCEPTION"
         assert "context exploded" in result["node_result"].error.message
-        # Metrics still collected even when error is caught
         assert mm.metrics["validate"].call_count == 1
 
 
@@ -221,6 +250,7 @@ class TestMiddlewareInGraph:
         result = graph.invoke(state)
 
         snap = mm.snapshot()
+        assert "preflight" in snap
         assert "validate" in snap
         assert "reason" in snap
         assert "respond" in snap
@@ -264,15 +294,13 @@ class TestMiddlewareInGraph:
 class TestLLMInjection:
 
     def test_stub_llm_in_state(self):
-        """State can carry an LLM callable (for future use by reason node)."""
+        """State can carry an LLM callable used by the reason node."""
         graph = build_conversation_graph()
         state = _make_state(_CleanContext(), llm=call_llm_stub)
 
         result = graph.invoke(state)
 
-        # Graph still works; llm is just carried in state
         assert result["current_turn"] == 1
-        # The llm callable is preserved in state
         assert result.get("llm") is call_llm_stub
 
     def test_none_llm_in_state(self):
@@ -285,6 +313,9 @@ class TestLLMInjection:
 
 
 # ── Pre-flight LLM validation tests ─────────────────────────────────
+# Preflight is now a graph node, not imperative build-time code.
+# The quiz and system_prompt come from the ConversationContext.
+# The LLM comes from state["llm"].
 
 def _smart_llm(request: LLMRequest) -> LLMResponse:
     """Echoes system prompt — always contains the right concepts."""
@@ -296,66 +327,88 @@ def _dumb_llm(request: LLMRequest) -> LLMResponse:
     return LLMResponse(content="I like pizza.", model="dumb", success=True)
 
 
-_SIMPLE_QUIZ = [
-    ValidationQuiz(
-        question="What node types exist?",
-        required_concepts=["goal", "requirement"],
-        weight=1.0,
-    ),
-]
+class TestPreflightNode:
 
+    def test_smart_llm_passes_preflight(self):
+        """Smart LLM passes preflight — graph continues to validate/reason/respond."""
+        graph = build_conversation_graph()
+        state = _make_state(_PreflightContext(), llm=_smart_llm)
 
-class TestPreflightValidation:
-
-    def test_smart_llm_builds_graph(self):
-        """Smart LLM passes preflight — graph builds successfully."""
-        graph = build_conversation_graph(
-            llm=_smart_llm,
-            preflight_quiz=_SIMPLE_QUIZ,
-            preflight_system_prompt="The system has goal and requirement types.",
-            preflight_threshold=0.5,
-        )
-        state = _make_state(_CleanContext())
         result = graph.invoke(state)
+
+        assert result["preflight_passed"] is True
+        assert result["current_turn"] == 1
+        assert result["status"] != "error"
+
+    def test_dumb_llm_fails_preflight(self):
+        """Dumb LLM fails preflight — graph exits with status='error'."""
+        graph = build_conversation_graph()
+        state = _make_state(_PreflightContext(), llm=_dumb_llm)
+
+        result = graph.invoke(state)
+
+        assert result["preflight_passed"] is False
+        assert result["status"] == "error"
+        # Should not have reached validate/reason/respond
+        assert result["current_turn"] == 0
+
+    def test_no_quiz_skips_preflight(self):
+        """Context with empty quiz — preflight passes through immediately."""
+        graph = build_conversation_graph()
+        state = _make_state(_CleanContext(), llm=_dumb_llm)
+
+        result = graph.invoke(state)
+
+        assert result["preflight_passed"] is True
         assert result["current_turn"] == 1
 
-    def test_dumb_llm_raises_preflight_error(self):
-        """Dumb LLM fails preflight — LLMPreflightError is raised."""
-        with pytest.raises(LLMPreflightError) as exc_info:
-            build_conversation_graph(
-                llm=_dumb_llm,
-                preflight_quiz=_SIMPLE_QUIZ,
-                preflight_system_prompt="irrelevant",
-                preflight_threshold=0.5,
-            )
+    def test_no_llm_skips_preflight(self):
+        """No LLM in state — preflight passes through immediately."""
+        graph = build_conversation_graph()
+        state = _make_state(_PreflightContext(), llm=None)
 
-        assert exc_info.value.report.weighted_score < 0.5
-        assert not exc_info.value.report.passed
-
-    def test_no_quiz_skips_validation(self):
-        """Without a quiz, no validation runs — even with an LLM."""
-        graph = build_conversation_graph(llm=_dumb_llm)
-        state = _make_state(_CleanContext())
         result = graph.invoke(state)
+
+        assert result["preflight_passed"] is True
         assert result["current_turn"] == 1
 
-    def test_no_llm_skips_validation(self):
-        """Without an LLM, no validation runs — even with a quiz."""
-        graph = build_conversation_graph(preflight_quiz=_SIMPLE_QUIZ)
-        state = _make_state(_CleanContext())
+    def test_preflight_runs_once(self):
+        """Preflight only runs the LLM on the first turn, not on loop-back."""
+        mm = MetricsMiddleware()
+        graph = build_conversation_graph(node_middleware=[mm])
+
+        # Use a gappy context WITH a quiz so the graph loops
+        class _GappyWithQuiz(_GappyContext):
+            @property
+            def system_prompt(self) -> str:
+                return "The system has goal and requirement types."
+
+            @property
+            def preflight_quiz(self) -> list:
+                return [
+                    ValidationQuiz(
+                        question="What types?",
+                        required_concepts=["goal", "requirement"],
+                        weight=1.0,
+                    ),
+                ]
+
+        state = _make_state(_GappyWithQuiz(), llm=_smart_llm)
         result = graph.invoke(state)
-        assert result["current_turn"] == 1
 
-    def test_preflight_report_on_error(self):
-        """The LLMPreflightError carries the full report."""
-        with pytest.raises(LLMPreflightError) as exc_info:
-            build_conversation_graph(
-                llm=_dumb_llm,
-                preflight_quiz=_SIMPLE_QUIZ,
-                preflight_system_prompt="",
-                preflight_threshold=0.5,
-            )
+        # Preflight called once, but validate/reason/respond loop MAX_TURNS
+        snap = mm.snapshot()
+        assert snap["preflight"]["call_count"] == 1
+        assert snap["validate"]["call_count"] == MAX_TURNS
 
-        report = exc_info.value.report
-        assert len(report.results) == 1
-        assert len(report.llm_responses) == 1
+    def test_preflight_failure_message(self):
+        """Failed preflight adds an informative message to state."""
+        graph = build_conversation_graph()
+        state = _make_state(_PreflightContext(), llm=_dumb_llm)
+
+        result = graph.invoke(state)
+
+        assert result["status"] == "error"
+        assert len(result["messages"]) >= 1
+        last_msg = result["messages"][-1]
+        assert "pre-flight validation" in last_msg.content.lower()

@@ -94,6 +94,7 @@ def _make_state(graph: KnowledgeGraph, rules=None) -> dict:
         "messages": [],
         "current_turn": 0,
         "status": "running",
+        "preflight_passed": False,
     }
 
 
@@ -371,6 +372,7 @@ class TestDomainAgnosticism:
             "messages": [],
             "current_turn": 0,
             "status": "running",
+            "preflight_passed": False,
         }
 
         result = graph.invoke(state)
@@ -398,6 +400,7 @@ class TestDomainAgnosticism:
             "messages": [],
             "current_turn": 0,
             "status": "running",
+            "preflight_passed": False,
         }
 
         result = graph.invoke(state)
