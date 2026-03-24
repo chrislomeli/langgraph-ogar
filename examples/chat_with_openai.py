@@ -42,6 +42,7 @@ if _env_file.exists():
 
 from conversation_engine.graph.builder import build_conversation_graph
 from conversation_engine.graph.architectural_context import ArchitecturalOntologyContext
+from conversation_engine.models.domain_config import DomainConfig
 from conversation_engine.models.rules import IntegrityRule
 from conversation_engine.fixtures import create_graph_with_gaps
 from conversation_engine.infrastructure.llm import make_openai_llm
@@ -88,7 +89,8 @@ def build_context() -> ArchitecturalOntologyContext:
             failure_message_template="Requirement '{subject_name}' has no capabilities.",
         ),
     ]
-    return ArchitecturalOntologyContext(graph=graph, rules=rules)
+    config = DomainConfig(project_name="architectural-chat", knowledge_graph=graph, rules=rules)
+    return ArchitecturalOntologyContext(config)
 
 
 def build_tool_client(human, ctx, findings_ref):

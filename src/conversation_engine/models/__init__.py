@@ -41,6 +41,10 @@ from conversation_engine.models.assessment import (
     Assessment,
 )
 
+# DomainConfig is intentionally NOT imported here to avoid a circular
+# import (domain_config → storage.graph → models.base → models/__init__).
+# Import it directly:  from conversation_engine.models.domain_config import DomainConfig
+
 __all__ = [
     "NodeType",
     "EdgeType",

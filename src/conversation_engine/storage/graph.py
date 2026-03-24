@@ -10,9 +10,41 @@ from typing import Dict, List, Optional, Set, Type, TypeVar
 from collections import defaultdict
 
 from conversation_engine.models.base import BaseNode, BaseEdge, NodeType, EdgeType
+from conversation_engine.models.nodes import (
+    Feature,
+    Goal,
+    GuidingPrinciple,
+    Requirement,
+    Capability,
+    UseCase,
+    Scenario,
+    DesignArtifact,
+    Decision,
+    Constraint,
+    Component,
+    Dependency,
+    DocumentationArtifact,
+)
 
 
 T = TypeVar('T', bound=BaseNode)
+
+# Registry maps NodeType strings → concrete Pydantic classes for deserialisation.
+_NODE_TYPE_REGISTRY: Dict[str, type[BaseNode]] = {
+    "feature": Feature,
+    "goal": Goal,
+    "guiding_principle": GuidingPrinciple,
+    "requirement": Requirement,
+    "capability": Capability,
+    "use_case": UseCase,
+    "scenario": Scenario,
+    "design_artifact": DesignArtifact,
+    "decision": Decision,
+    "constraint": Constraint,
+    "component": Component,
+    "dependency": Dependency,
+    "documentation_artifact": DocumentationArtifact,
+}
 
 
 class KnowledgeGraph:
@@ -362,6 +394,57 @@ class KnowledgeGraph:
         """Get total number of edges in the graph."""
         return len(self._edges)
     
+    # ── Serialisation ────────────────────────────────────────────────
+
+    def to_dict(self) -> dict:
+        """
+        Serialise the full graph to a plain dict.
+
+        The output is JSON-safe (no custom objects) and suitable for
+        persistence.  Mirrors what a ``MATCH (n)-[r]->(m)`` export
+        from Memgraph would produce.
+
+        Returns:
+            A dict with ``"nodes"`` and ``"edges"`` lists.
+        """
+        nodes = []
+        for node in self._nodes.values():
+            data = node.model_dump()
+            data["_type"] = self._get_node_type(node)
+            nodes.append(data)
+
+        edges = [e.model_dump() for e in self._edges.values()]
+
+        return {"nodes": nodes, "edges": edges}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "KnowledgeGraph":
+        """
+        Reconstruct a KnowledgeGraph from the dict produced by ``to_dict()``.
+
+        Raises:
+            ValueError: If a node ``_type`` is not in the registry.
+        """
+        graph = cls()
+
+        for node_data in data.get("nodes", []):
+            node_type = node_data.pop("_type", None)
+            if node_type is None:
+                raise ValueError(f"Node data missing '_type': {node_data}")
+
+            node_cls = _NODE_TYPE_REGISTRY.get(node_type)
+            if node_cls is None:
+                raise ValueError(
+                    f"Unknown node type '{node_type}'. "
+                    f"Known types: {sorted(_NODE_TYPE_REGISTRY)}"
+                )
+            graph.add_node(node_cls.model_validate(node_data))
+
+        for edge_data in data.get("edges", []):
+            graph.add_edge(BaseEdge.model_validate(edge_data))
+
+        return graph
+
     # ── Internal Helpers ─────────────────────────────────────────────
     
     def _get_node_type(self, node: BaseNode) -> NodeType:

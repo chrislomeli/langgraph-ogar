@@ -10,13 +10,14 @@ It owns the domain state and exposes only Findings to the loop.
 from __future__ import annotations
 
 import uuid
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from conversation_engine.graph.context import (
     ConversationContext,
     Finding,
     ValidationResult,
 )
+from conversation_engine.models.domain_config import DomainConfig
 from conversation_engine.models.rules import IntegrityRule
 from conversation_engine.models.queries import GraphQueryPattern
 from conversation_engine.storage.graph import KnowledgeGraph
@@ -53,15 +54,35 @@ class ArchitecturalOntologyContext:
     subtyping — no inheritance from the Protocol class is needed.
     """
 
-    def __init__(
-        self,
+    def __init__(self, config: DomainConfig) -> None:
+        self._config = config
+        self._graph = config.knowledge_graph or KnowledgeGraph()
+        self._rules = config.rules or []
+        self._query_patterns = config.query_patterns or []
+
+    @classmethod
+    def from_components(
+        cls,
         graph: KnowledgeGraph,
         rules: List[IntegrityRule],
         query_patterns: List[GraphQueryPattern] | None = None,
-    ) -> None:
-        self._graph = graph
-        self._rules = rules
-        self._query_patterns = query_patterns or []
+        system_prompt: Optional[str] = None,
+        quiz: Optional[List[ValidationQuiz]] = None,
+    ) -> "ArchitecturalOntologyContext":
+        """
+        Convenience factory for callers that don't have a DomainConfig yet.
+
+        Wraps the individual arguments into a DomainConfig and delegates
+        to the primary constructor.
+        """
+        return cls(DomainConfig(
+            project_name="unnamed",
+            knowledge_graph=graph,
+            rules=rules,
+            query_patterns=query_patterns,
+            system_prompt=system_prompt,
+            quiz=quiz,
+        ))
 
     # ── Protocol implementation ─────────────────────────────────────
 
@@ -136,8 +157,10 @@ class ArchitecturalOntologyContext:
 
     @property
     def system_prompt(self) -> str:
-        return ARCHITECTURAL_SYSTEM_PROMPT
+        return self._config.system_prompt or ARCHITECTURAL_SYSTEM_PROMPT
 
     @property
     def preflight_quiz(self) -> List[ValidationQuiz]:
+        if self._config.quiz is not None:
+            return list(self._config.quiz)
         return list(ARCHITECTURAL_QUIZ)

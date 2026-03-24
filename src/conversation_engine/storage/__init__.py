@@ -6,11 +6,20 @@ Provides in-memory graph storage with proper graph semantics:
 - Queryable edge relationships
 - Graph traversal operations
 - Index-backed lookups
+- Project-level CRUD for domain configurations
 """
 from conversation_engine.storage.graph import KnowledgeGraph
 from conversation_engine.storage.queries import GraphQueries
+from conversation_engine.storage.project_store import (
+    ProjectStore,
+    InMemoryProjectStore,
+)
+from conversation_engine.storage.file_project_store import FileProjectStore
 
 __all__ = [
     "KnowledgeGraph",
     "GraphQueries",
+    "ProjectStore",
+    "InMemoryProjectStore",
+    "FileProjectStore",
 ]

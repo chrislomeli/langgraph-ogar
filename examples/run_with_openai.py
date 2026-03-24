@@ -41,6 +41,7 @@ if _env_file.exists():
 
 from conversation_engine.graph.builder import build_conversation_graph
 from conversation_engine.graph.architectural_context import ArchitecturalOntologyContext
+from conversation_engine.models.domain_config import DomainConfig
 from conversation_engine.models.rules import IntegrityRule
 from conversation_engine.fixtures import create_graph_with_gaps
 from conversation_engine.infrastructure.llm import make_openai_llm
@@ -83,7 +84,8 @@ def build_context() -> ArchitecturalOntologyContext:
         ),
     ]
 
-    ctx = ArchitecturalOntologyContext(graph=graph, rules=rules)
+    config = DomainConfig(project_name="architectural-demo", knowledge_graph=graph, rules=rules)
+    ctx = ArchitecturalOntologyContext(config)
     print(f"  Graph: {graph.node_count()} nodes, {graph.edge_count()} edges")
     print(f"  Rules: {len(rules)}")
     print(f"  Preflight quiz: {len(ctx.preflight_quiz)} questions")

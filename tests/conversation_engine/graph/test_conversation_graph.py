@@ -27,6 +27,7 @@ from conversation_engine.graph.builder import (
     route_after_converse,
     MAX_TURNS,
 )
+from conversation_engine.models.domain_config import DomainConfig
 from conversation_engine.graph.architectural_context import (
     ArchitecturalOntologyContext,
 )
@@ -78,10 +79,12 @@ def _make_context(
     rules: list | None = None,
 ) -> ArchitecturalOntologyContext:
     """Build an ArchitecturalOntologyContext for testing."""
-    return ArchitecturalOntologyContext(
-        graph=graph,
+    config = DomainConfig(
+        project_name="test",
+        knowledge_graph=graph,
         rules=rules or [_goal_req_rule()],
     )
+    return ArchitecturalOntologyContext(config)
 
 
 def _make_state(graph: KnowledgeGraph, rules=None) -> dict:

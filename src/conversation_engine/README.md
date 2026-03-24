@@ -241,14 +241,17 @@ route → END        (all clear, max turns, or error/complete)
 from conversation_engine.graph import (
     build_conversation_graph,
     ArchitecturalOntologyContext,
+    DomainConfig,
 )
 from conversation_engine.fixtures import create_graph_with_gaps
 from conversation_engine.models.rules import IntegrityRule
 
-context = ArchitecturalOntologyContext(
-    graph=create_graph_with_gaps(),
+config = DomainConfig(
+    project_name="my-project",
+    knowledge_graph=create_graph_with_gaps(),
     rules=[your_rules],
 )
+context = ArchitecturalOntologyContext(config)
 graph = build_conversation_graph()
 result = graph.invoke({
     "context": context,

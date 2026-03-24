@@ -29,6 +29,7 @@ from conversation_engine.graph.builder import build_conversation_graph
 from conversation_engine.graph.architectural_context import (
     ArchitecturalOntologyContext,
 )
+from conversation_engine.models.domain_config import DomainConfig
 
 __all__ = [
     "ConversationContext",
@@ -39,4 +40,5 @@ __all__ = [
     "ConversationState",
     "build_conversation_graph",
     "ArchitecturalOntologyContext",
+    "DomainConfig",
 ]
