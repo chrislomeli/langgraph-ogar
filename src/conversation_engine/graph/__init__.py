@@ -12,6 +12,7 @@ Infrastructure is injected at build time:
 - interceptors / middleware via build_conversation_graph(...)
 - LLM callable via state["llm"]
 - Human surface via state["human"]
+- Tool client via state["tool_client"]
 - Error handling via ErrorHandlingMiddleware
 """
 from conversation_engine.graph.context import (

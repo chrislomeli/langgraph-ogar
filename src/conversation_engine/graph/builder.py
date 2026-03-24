@@ -126,4 +126,5 @@ def build_conversation_graph(
     builder.add_edge("validate", "converse")
     builder.add_conditional_edges("converse", route_after_converse)
 
-    return builder.compile()
+    compiled_graph = builder.compile()
+    return compiled_graph

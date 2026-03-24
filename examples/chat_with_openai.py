@@ -128,6 +128,7 @@ def main():
     ctx = build_context()
     print(f"\n  Graph: {ctx.graph.node_count()} nodes, {ctx.graph.edge_count()} edges")
 
+    # open wrapper class with llm
     model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
     try:
         llm = make_openai_llm(model=model)

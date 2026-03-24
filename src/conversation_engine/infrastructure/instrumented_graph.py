@@ -125,13 +125,15 @@ class InstrumentedGraph(StateGraph):
         mw_list = self._node_middleware
 
         @functools.wraps(fn)
-        def wrapper(state: Any) -> Any:
+        def wrapper(state: Any, **kwargs: Any) -> Any:
             # Build the chain inside-out:
             # mw_list[0] wraps mw_list[1] wraps ... wraps fn
             def make_next(index: int) -> Callable:
                 if index >= len(mw_list):
-                    # Innermost: call the actual node function
-                    return fn
+                    # Innermost: call the actual node function, forwarding kwargs (e.g. config)
+                    def leaf(s: Any) -> Any:
+                        return fn(s, **kwargs)
+                    return leaf
 
                 mw = mw_list[index]
                 inner = make_next(index + 1)
@@ -154,7 +156,7 @@ class InstrumentedGraph(StateGraph):
         middleware = self._middleware
 
         @functools.wraps(fn)
-        def wrapper(state: Any) -> Any:
+        def wrapper(state: Any, **kwargs: Any) -> Any:
             for ic in interceptors:
                 try:
                     ic.before(node_name, state)
@@ -162,7 +164,7 @@ class InstrumentedGraph(StateGraph):
                     logger.exception("Interceptor %s.before() failed for node '%s'", type(ic).__name__, node_name)
 
             try:
-                result = fn(state)
+                result = fn(state, **kwargs)
             except Exception as exc:
                 for ic in interceptors:
                     try:

@@ -230,7 +230,11 @@ def _converse_agent(state: ConversationState) -> Dict[str, Any]:
 
     # Get tool schemas from the client (uses list_tools() — the public interface)
     tool_schemas = specs_to_langchain_tools(tool_client)
+
+    # todo - pros and cons for doing jit binding?
     llm_with_tools = chat_model.bind_tools(tool_schemas)
+
+
 
     # Build initial messages for the LLM
     from langchain_core.messages import SystemMessage
@@ -240,7 +244,7 @@ def _converse_agent(state: ConversationState) -> Dict[str, Any]:
         SystemMessage(content=ctx.system_prompt),
     ]
 
-    # Include prior conversation history
+    # Include prior conversation history  - todo - not wrong or right but lets understand why we are not using using langchain macros to append to existing list
     prior_messages = state.get("messages", [])
     for msg in prior_messages:
         chat_messages.append(msg)
