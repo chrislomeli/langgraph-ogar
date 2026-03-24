@@ -24,6 +24,8 @@ from langchain_core.messages import BaseMessage
 from conversation_engine.graph.context import ConversationContext, Finding
 from conversation_engine.infrastructure.node_validation import NodeResult
 from conversation_engine.infrastructure.llm import CallLLM
+from conversation_engine.infrastructure.human import CallHuman
+from conversation_engine.infrastructure.tool_client import ToolClient
 
 
 # ── Subgraph contract ────────────────────────────────────────────────
@@ -51,6 +53,12 @@ class ConversationState(TypedDict):
 
     # Injected LLM callable — optional, nodes fall back to stub if absent
     llm: Optional[CallLLM]
+
+    # Injected human surface — optional, nodes skip human interaction if absent
+    human: Optional[CallHuman]
+
+    # Injected tool client — optional, converse node uses it for ReAct agent loop
+    tool_client: Optional[ToolClient]
 
     # Built during conversation (domain-agnostic)
     findings: List[Finding]

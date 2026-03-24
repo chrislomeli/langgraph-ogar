@@ -19,6 +19,21 @@ from conversation_engine.infrastructure.tool_client.client import (
     ToolCallError,
     LocalToolClient,
 )
+from conversation_engine.infrastructure.tool_client.conversation_tools import (
+    AskHumanInput,
+    AskHumanOutput,
+    RevalidateInput,
+    RevalidateOutput,
+    MarkCompleteInput,
+    MarkCompleteOutput,
+    make_ask_human_tool,
+    make_revalidate_tool,
+    make_mark_complete_tool,
+)
+from conversation_engine.infrastructure.tool_client.langchain_bridge import (
+    specs_to_langchain_tools,
+    execute_tool_call,
+)
 
 __all__ = [
     "ToolSpec",
@@ -29,4 +44,17 @@ __all__ = [
     "ToolClient",
     "ToolCallError",
     "LocalToolClient",
+    # Conversation tools
+    "AskHumanInput",
+    "AskHumanOutput",
+    "RevalidateInput",
+    "RevalidateOutput",
+    "MarkCompleteInput",
+    "MarkCompleteOutput",
+    "make_ask_human_tool",
+    "make_revalidate_tool",
+    "make_mark_complete_tool",
+    # LangChain bridge
+    "specs_to_langchain_tools",
+    "execute_tool_call",
 ]

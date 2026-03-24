@@ -1,12 +1,13 @@
 """
 infrastructure — Reusable LangGraph infrastructure.
 
-Five subsystems:
+Six subsystems:
   1. middleware — Composable cross-cutting concerns (NodeMiddleware chain)
   2. instrumented_graph — InstrumentedGraph subclass that wires the middleware chain
   3. tool_client — Transport-agnostic tool contracts (MCP-ready)
   4. node_validation — NodeResult envelope (used by middleware, not directly by nodes)
   5. llm — Protocol-based LLM interaction (CallLLM + stub + real backends)
+  6. human — Protocol-based human interaction (CallHuman + console + mock)
 
 This package has NO dependencies on domain models.
 Only depends on: langgraph, langchain-core, pydantic.
@@ -57,6 +58,13 @@ from conversation_engine.infrastructure.llm import (
     LLMResponse,
     call_llm_stub,
 )
+from conversation_engine.infrastructure.human import (
+    CallHuman,
+    HumanRequest,
+    HumanResponse,
+    ConsoleHuman,
+    MockHuman,
+)
 
 __all__ = [
     # Instrumented graph
@@ -95,4 +103,10 @@ __all__ = [
     "LLMRequest",
     "LLMResponse",
     "call_llm_stub",
+    # Human
+    "CallHuman",
+    "HumanRequest",
+    "HumanResponse",
+    "ConsoleHuman",
+    "MockHuman",
 ]

@@ -2,18 +2,20 @@
 Conversation subgraph builder.
 
 Topology:
-    START → preflight → route → validate → reason → respond → route
-    route_after_preflight → validate   (if preflight passes or was skipped)
-    route_after_preflight → END        (if preflight fails → status='error')
-    route_after_respond   → validate   (if open findings remain and turns < max)
-    route_after_respond   → END        (complete, or max turns reached)
+    START → preflight → route_after_preflight → validate → converse → route
+    route_after_preflight → validate   (preflight passes or was skipped)
+    route_after_preflight → END        (preflight fails → status='error')
+    route_after_converse  → validate   (open findings remain, turns < max)
+    route_after_converse  → END        (complete, max turns, error, or hand_off)
+
+The `converse` node is a collaborative AI/human exchange:
+  1. LLM analyzes findings + message history → produces AI message
+  2. Human surface (CallHuman) collects the user's reply
+  3. Both messages are appended to state, turn counter advances
 
 The graph is **domain-agnostic**.  It works with Findings (not
 Assessments) and delegates all domain logic to the injected
 ConversationContext.
-
-The graph is designed to be used standalone or as a subgraph of a
-larger application.  It does NOT own the checkpointer or LLM client.
 
 Infrastructure:
 - InstrumentedGraph wraps every node with a composable NodeMiddleware chain
@@ -29,7 +31,7 @@ from typing import Literal, Optional, Sequence
 from langgraph.graph import START, END
 
 from conversation_engine.graph.state import ConversationState
-from conversation_engine.graph.nodes import preflight, validate, reason, respond
+from conversation_engine.graph.nodes import preflight, validate, converse
 from conversation_engine.infrastructure.instrumented_graph import (
     InstrumentedGraph,
     Interceptor,
@@ -54,7 +56,7 @@ def route_after_preflight(state: ConversationState) -> Literal["validate", "__en
     return "validate"
 
 
-def route_after_respond(state: ConversationState) -> Literal["validate", "__end__"]:
+def route_after_converse(state: ConversationState) -> Literal["validate", "__end__"]:
     """
     Decide whether to loop back for another validation pass or finish.
 
@@ -103,11 +105,8 @@ def build_conversation_graph(
 
     Returns a compiled graph ready for .invoke() or .stream().
 
-    Pre-flight validation:
-        The preflight node pulls the quiz and system prompt from the
-        ConversationContext, and the LLM from state["llm"].  If either
-        is absent, preflight passes through immediately.  On failure,
-        it sets status='error' and the router exits the graph.
+    Topology: START → preflight → validate → converse → route → ...
+    The converse node handles both LLM reasoning and human interaction.
     """
     builder = InstrumentedGraph(
         ConversationState,
@@ -119,14 +118,12 @@ def build_conversation_graph(
     # Nodes
     builder.add_node("preflight", preflight)
     builder.add_node("validate", validate)
-    builder.add_node("reason", reason)
-    builder.add_node("respond", respond)
+    builder.add_node("converse", converse)
 
     # Edges
     builder.add_edge(START, "preflight")
     builder.add_conditional_edges("preflight", route_after_preflight)
-    builder.add_edge("validate", "reason")
-    builder.add_edge("reason", "respond")
-    builder.add_conditional_edges("respond", route_after_respond)
+    builder.add_edge("validate", "converse")
+    builder.add_conditional_edges("converse", route_after_converse)
 
     return builder.compile()

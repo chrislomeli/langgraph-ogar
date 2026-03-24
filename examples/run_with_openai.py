@@ -182,7 +182,7 @@ def main():
         sys.exit(1)
 
     print("\n[3] Running conversation graph...")
-    print("  Topology: START → preflight → validate → reason → respond → route")
+    print("  Topology: START → preflight → validate → converse → route")
     result, metrics = run_graph(ctx, llm)
 
     print("\n[4] Results:")

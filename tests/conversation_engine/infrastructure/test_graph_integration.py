@@ -171,11 +171,9 @@ class TestInterceptorsInGraph:
         snap = mi.snapshot()
         assert "preflight" in snap
         assert "validate" in snap
-        assert "reason" in snap
-        assert "respond" in snap
+        assert "converse" in snap
         assert snap["validate"]["call_count"] >= 1
-        assert snap["reason"]["call_count"] >= 1
-        assert snap["respond"]["call_count"] >= 1
+        assert snap["converse"]["call_count"] >= 1
 
     def test_metrics_on_looping_run(self):
         """MetricsInterceptor shows multiple calls when graph loops."""
@@ -187,8 +185,7 @@ class TestInterceptorsInGraph:
 
         snap = mi.snapshot()
         assert snap["validate"]["call_count"] == MAX_TURNS
-        assert snap["reason"]["call_count"] == MAX_TURNS
-        assert snap["respond"]["call_count"] == MAX_TURNS
+        assert snap["converse"]["call_count"] == MAX_TURNS
 
     def test_logging_interceptor_no_crash(self):
         """LoggingInterceptor runs without crashing the graph."""
@@ -252,8 +249,7 @@ class TestMiddlewareInGraph:
         snap = mm.snapshot()
         assert "preflight" in snap
         assert "validate" in snap
-        assert "reason" in snap
-        assert "respond" in snap
+        assert "converse" in snap
         assert snap["validate"]["call_count"] >= 1
 
     def test_metrics_on_looping_run(self):
@@ -266,8 +262,7 @@ class TestMiddlewareInGraph:
 
         snap = mm.snapshot()
         assert snap["validate"]["call_count"] == MAX_TURNS
-        assert snap["reason"]["call_count"] == MAX_TURNS
-        assert snap["respond"]["call_count"] == MAX_TURNS
+        assert snap["converse"]["call_count"] == MAX_TURNS
 
     def test_logging_middleware_no_crash(self):
         """LoggingMiddleware runs without crashing the graph."""
@@ -294,7 +289,7 @@ class TestMiddlewareInGraph:
 class TestLLMInjection:
 
     def test_stub_llm_in_state(self):
-        """State can carry an LLM callable used by the reason node."""
+        """State can carry an LLM callable used by the converse node."""
         graph = build_conversation_graph()
         state = _make_state(_CleanContext(), llm=call_llm_stub)
 
@@ -396,7 +391,7 @@ class TestPreflightNode:
         state = _make_state(_GappyWithQuiz(), llm=_smart_llm)
         result = graph.invoke(state)
 
-        # Preflight called once, but validate/reason/respond loop MAX_TURNS
+        # Preflight called once, but validate/converse loop MAX_TURNS
         snap = mm.snapshot()
         assert snap["preflight"]["call_count"] == 1
         assert snap["validate"]["call_count"] == MAX_TURNS

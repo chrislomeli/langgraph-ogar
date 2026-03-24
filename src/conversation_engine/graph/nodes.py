@@ -6,8 +6,7 @@ Each function takes ConversationState and returns a partial state update.
 Node responsibilities:
 - preflight — run pre-flight LLM validation (once, on first turn)
 - validate  — delegate to ConversationContext.validate(), produce Findings
-- reason    — read findings, call LLM (or stub) to decide what to communicate
-- respond   — advance the turn counter
+- converse  — ReAct agent loop: LLM calls tools (ask_human, revalidate, etc.)
 
 These nodes are **domain-agnostic**.  They work exclusively through the
 ConversationContext protocol and the Finding type.  No domain-specific
@@ -15,10 +14,11 @@ imports (KnowledgeGraph, IntegrityRule, Assessment, etc.) appear here.
 """
 from __future__ import annotations
 
+import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from conversation_engine.graph.context import ConversationContext, Finding
 from conversation_engine.graph.state import ConversationState
@@ -29,6 +29,16 @@ from conversation_engine.infrastructure.llm import (
     LLMValidator,
     LLMValidatorReport,
     quiz_report_summary,
+)
+from conversation_engine.infrastructure.human import (
+    CallHuman,
+    HumanRequest,
+    HumanResponse,
+)
+from conversation_engine.infrastructure.tool_client import (
+    ToolClient,
+    execute_tool_call,
+    specs_to_langchain_tools,
 )
 
 logger = logging.getLogger(__name__)
@@ -106,60 +116,234 @@ def validate(state: ConversationState) -> Dict[str, Any]:
     }
 
 
-# ── reason (stub) ───────────────────────────────────────────────────
+# ── converse ─────────────────────────────────────────────────────────
 
-def reason(state: ConversationState) -> Dict[str, Any]:
+MAX_AGENT_STEPS = 10  # safety limit on tool-call iterations per turn
+
+
+def _build_findings_context(findings: List[Finding]) -> str:
+    """Format open findings as text for the LLM prompt."""
+    if not findings:
+        return "No open findings — all integrity checks pass."
+    lines = [f"Current findings ({len(findings)}):"]
+    for f in findings:
+        lines.append(f"  [{f.severity}] {f.finding_type}: {f.message}")
+    return "\n".join(lines)
+
+
+def _converse_simple(state: ConversationState) -> Dict[str, Any]:
     """
-    Read current findings and decide what to communicate.
+    Simple converse fallback — no tool_client, no agent loop.
 
-    If an LLM is available in state, call it with the findings and context.
-    Otherwise, fall back to the context's summary formatting.
+    Used when no ToolClient is injected (backwards compat, basic tests).
+    LLM produces text → optionally surface to human → bump turn.
     """
     ctx: ConversationContext = state["context"]
     open_findings = [f for f in state.get("findings", []) if not f.resolved]
     llm: Optional[CallLLM] = state.get("llm")
+    human: Optional[CallHuman] = state.get("human")
+    messages = state.get("messages", [])
+    current_turn = state.get("current_turn", 0)
 
     if llm:
-        # Build the LLM request with context and findings
-        findings_text = "\n".join(f"- {f.finding_type}: {f.message}" for f in open_findings)
-        user_message = f"""
-Current findings ({len(open_findings)}):
-{findings_text}
+        findings_context = _build_findings_context(open_findings)
+        history_lines = []
+        for msg in messages:
+            role = "AI" if msg.type == "ai" else "Human"
+            history_lines.append(f"{role}: {msg.content}")
+        history = "\n".join(history_lines)
 
-Please analyze these findings and provide a recommendation or summary.
-"""
-        
+        user_message = findings_context
+        if history:
+            user_message = (
+                f"{findings_context}\n\n"
+                f"Conversation so far:\n{history}\n\n"
+                f"Continue the conversation. Respond to the human's "
+                f"last message if they said something, otherwise "
+                f"analyze the findings and suggest next steps."
+            )
+
         request = LLMRequest(
             system_prompt=ctx.system_prompt,
             user_message=user_message,
             context={
                 "session_id": state.get("session_id"),
-                "current_turn": state.get("current_turn", 0),
-                "prior_messages": state.get("messages", []),
+                "current_turn": current_turn,
             },
         )
-        
+
         try:
             response = llm(request)
-            summary = response.content
+            ai_text = response.content
         except Exception as e:
-            # Fallback to context if LLM fails
-            summary = f"LLM error: {e}. {ctx.format_finding_summary(open_findings)}"
+            ai_text = f"LLM error: {e}. {ctx.format_finding_summary(open_findings)}"
     else:
-        # No LLM available - use context summary
-        summary = ctx.format_finding_summary(open_findings)
+        ai_text = ctx.format_finding_summary(open_findings)
 
-    return {"messages": [AIMessage(content=summary)]}
+    new_messages: List = [AIMessage(content=ai_text)]
+
+    if human:
+        human_response = human(HumanRequest(
+            prompt=ai_text,
+            context={"turn": current_turn, "open_findings": len(open_findings)},
+        ))
+        if not human_response.skipped:
+            new_messages.append(HumanMessage(content=human_response.content))
+
+    return {
+        "messages": new_messages,
+        "current_turn": current_turn + 1,
+    }
 
 
-# ── respond ──────────────────────────────────────────────────────────
-
-def respond(state: ConversationState) -> Dict[str, Any]:
+def _converse_agent(state: ConversationState) -> Dict[str, Any]:
     """
-    Advance the turn counter.
+    ReAct agent loop — LLM decides which tools to call.
 
-    In a real system this node would also handle formatting, tool output
-    rendering, etc.  For now it simply bumps current_turn so the router
-    can enforce a max-turns guard.
+    The LLM has access to tools (ask_human, revalidate, mark_complete, etc.)
+    and calls them as needed.  The loop continues until:
+      - The LLM produces a plain text response (no tool calls)
+      - The LLM calls mark_complete
+      - MAX_AGENT_STEPS is reached (safety)
+
+    Tool calls are executed via the ToolClient (validated, auditable).
     """
-    return {"current_turn": state.get("current_turn", 0) + 1}
+    ctx: ConversationContext = state["context"]
+    open_findings = [f for f in state.get("findings", []) if not f.resolved]
+    tool_client: ToolClient = state["tool_client"]
+    current_turn = state.get("current_turn", 0)
+    new_messages: List = []
+    status_update: Optional[str] = None
+    findings_update = None
+
+    # Build the ChatOpenAI model with tools bound
+    # We access the underlying ChatOpenAI from the adapter
+    llm_callable: CallLLM = state["llm"]
+    if hasattr(llm_callable, '_chat'):
+        # OpenAICallLLM wraps a ChatOpenAI — use it directly
+        chat_model = llm_callable._chat
+    else:
+        raise ValueError(
+            "ReAct agent loop requires an OpenAI-compatible LLM adapter "
+            "with a _chat attribute (e.g. OpenAICallLLM)."
+        )
+
+    # Get tool schemas from the client (uses list_tools() — the public interface)
+    tool_schemas = specs_to_langchain_tools(tool_client)
+    llm_with_tools = chat_model.bind_tools(tool_schemas)
+
+    # Build initial messages for the LLM
+    from langchain_core.messages import SystemMessage
+    findings_context = _build_findings_context(open_findings)
+
+    chat_messages = [
+        SystemMessage(content=ctx.system_prompt),
+    ]
+
+    # Include prior conversation history
+    prior_messages = state.get("messages", [])
+    for msg in prior_messages:
+        chat_messages.append(msg)
+
+    # Add current findings as a new user message
+    turn_prompt = (
+        f"{findings_context}\n\n"
+        f"You have tools available. Use ask_human to communicate with the human. "
+        f"Use revalidate to re-check the knowledge graph after changes. "
+        f"Use mark_complete when the conversation goal is met or no further progress can be made.\n\n"
+        f"This is turn {current_turn + 1}. Analyze the findings and engage with the human."
+    )
+    chat_messages.append(HumanMessage(content=turn_prompt))
+
+    # ── Agent loop ────────────────────────────────────────────────
+    for step in range(MAX_AGENT_STEPS):
+        logger.debug("Agent step %d/%d", step + 1, MAX_AGENT_STEPS)
+
+        ai_response = llm_with_tools.invoke(chat_messages)
+        chat_messages.append(ai_response)
+
+        # If no tool calls, the LLM is done for this turn
+        if not ai_response.tool_calls:
+            if ai_response.content:
+                new_messages.append(AIMessage(content=ai_response.content))
+            break
+
+        # Execute each tool call
+        for tool_call in ai_response.tool_calls:
+            tool_name = tool_call["name"]
+            logger.info("Agent calling tool: %s(%s)", tool_name, tool_call.get("args", {}))
+
+            # Execute through the ToolClient (validated, auditable)
+            result_text = execute_tool_call(tool_client, tool_call)
+
+            # Feed result back to LLM as a ToolMessage
+            chat_messages.append(ToolMessage(
+                content=result_text,
+                tool_call_id=tool_call["id"],
+            ))
+
+            # Handle special tool side-effects
+            if tool_name == "mark_complete":
+                status_update = "complete"
+                logger.info("Agent called mark_complete — ending conversation")
+
+            if tool_name == "revalidate":
+                # Parse the result to update findings
+                try:
+                    result_data = json.loads(result_text)
+                    logger.info(
+                        "Revalidation: %d open, %d resolved",
+                        result_data.get("open_findings", 0),
+                        result_data.get("resolved_findings", 0),
+                    )
+                except (json.JSONDecodeError, KeyError):
+                    pass
+
+            if tool_name == "ask_human":
+                # Record the AI's message to the human
+                ai_prompt = tool_call.get("args", {}).get("message", "")
+                if ai_prompt:
+                    new_messages.append(AIMessage(content=ai_prompt))
+
+                # Parse human response and add to conversation messages
+                try:
+                    result_data = json.loads(result_text)
+                    human_text = result_data.get("response", "")
+                    skipped = result_data.get("skipped", False)
+                    if human_text and not skipped:
+                        new_messages.append(HumanMessage(content=human_text))
+                except (json.JSONDecodeError, KeyError):
+                    pass
+
+        # If mark_complete was called, stop the loop
+        if status_update == "complete":
+            break
+    else:
+        logger.warning("Agent hit MAX_AGENT_STEPS (%d) — forcing turn end", MAX_AGENT_STEPS)
+
+    # ── Build state update ────────────────────────────────────────
+    update: Dict[str, Any] = {
+        "messages": new_messages,
+        "current_turn": current_turn + 1,
+    }
+    if status_update:
+        update["status"] = status_update
+
+    return update
+
+
+def converse(state: ConversationState) -> Dict[str, Any]:
+    """
+    Collaborative AI/human exchange — dispatches to agent or simple mode.
+
+    If a ToolClient is present in state, runs the ReAct agent loop
+    where the LLM decides which tools to call (ask_human, revalidate, etc.).
+
+    If no ToolClient, falls back to simple linear mode (LLM text → human → done).
+    """
+    tool_client = state.get("tool_client")
+    llm = state.get("llm")
+
+    if tool_client and llm:
+        return _converse_agent(state)
+    return _converse_simple(state)

@@ -4,8 +4,7 @@ Tests for the conversation graph.
 Covers:
 - State schema basics
 - validate node (produces findings from violations via context)
-- reason node (summarises findings via context)
-- respond node (bumps turn counter)
+- converse node (LLM + human exchange, bumps turn counter)
 - Full graph: complete graph → single pass, exits clean
 - Full graph: graph with gaps → loops, finds violations
 - Full graph: max turns guard
@@ -22,10 +21,10 @@ from conversation_engine.graph.context import (
     ValidationResult,
 )
 from conversation_engine.graph.state import ConversationState
-from conversation_engine.graph.nodes import validate, reason, respond
+from conversation_engine.graph.nodes import validate, converse
 from conversation_engine.graph.builder import (
     build_conversation_graph,
-    route_after_respond,
+    route_after_converse,
     MAX_TURNS,
 )
 from conversation_engine.graph.architectural_context import (
@@ -141,22 +140,22 @@ class TestValidateNode:
         assert "old-resolved" in ids
 
 
-class TestReasonNode:
-    """Test the reason node in isolation."""
+class TestConverseNode:
+    """Test the converse node in isolation (no LLM, no human)."""
 
     def test_no_findings_positive_message(self):
-        """When no findings, reason gives a positive summary."""
+        """When no findings, converse gives a positive summary."""
         state = _make_state(create_graph_complete())
         state["findings"] = []
 
-        result = reason(state)
+        result = converse(state)
 
         assert len(result["messages"]) == 1
         assert "complete" in result["messages"][0].content.lower() or \
                "pass" in result["messages"][0].content.lower()
 
     def test_with_findings_lists_issues(self):
-        """When findings exist, reason summarises them."""
+        """When findings exist, converse summarises them."""
         state = _make_state(create_graph_with_gaps())
         state["findings"] = [
             Finding(
@@ -168,41 +167,37 @@ class TestReasonNode:
             ),
         ]
 
-        result = reason(state)
+        result = converse(state)
 
         content = result["messages"][0].content
         assert "1 issue" in content
         assert "high" in content.lower()
 
-
-class TestRespondNode:
-    """Test the respond node in isolation."""
-
     def test_increments_turn(self):
         state = _make_state(create_minimal_graph())
         state["current_turn"] = 2
 
-        result = respond(state)
+        result = converse(state)
         assert result["current_turn"] == 3
 
     def test_starts_at_zero(self):
         state = _make_state(create_minimal_graph())
 
-        result = respond(state)
+        result = converse(state)
         assert result["current_turn"] == 1
 
 
 # ── Router tests ─────────────────────────────────────────────────────
 
 class TestRouter:
-    """Test route_after_respond logic."""
+    """Test route_after_converse logic."""
 
     def test_exits_when_no_open_findings(self):
         state = _make_state(create_graph_complete())
         state["findings"] = []
         state["current_turn"] = 1
 
-        assert route_after_respond(state) == "__end__"
+        assert route_after_converse(state) == "__end__"
 
     def test_loops_when_open_findings_remain(self):
         state = _make_state(create_graph_with_gaps())
@@ -217,7 +212,7 @@ class TestRouter:
         ]
         state["current_turn"] = 1
 
-        assert route_after_respond(state) == "validate"
+        assert route_after_converse(state) == "validate"
 
     def test_exits_on_max_turns(self):
         state = _make_state(create_graph_with_gaps())
@@ -232,19 +227,19 @@ class TestRouter:
         ]
         state["current_turn"] = MAX_TURNS
 
-        assert route_after_respond(state) == "__end__"
+        assert route_after_converse(state) == "__end__"
 
     def test_exits_on_complete_status(self):
         state = _make_state(create_graph_complete())
         state["status"] = "complete"
 
-        assert route_after_respond(state) == "__end__"
+        assert route_after_converse(state) == "__end__"
 
     def test_exits_on_error_status(self):
         state = _make_state(create_graph_complete())
         state["status"] = "error"
 
-        assert route_after_respond(state) == "__end__"
+        assert route_after_converse(state) == "__end__"
 
 
 # ── Full graph integration tests ─────────────────────────────────────
