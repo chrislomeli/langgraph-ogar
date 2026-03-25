@@ -47,7 +47,7 @@ def _default_finding_type(rule_id: str) -> str:
 
 class ArchitecturalOntologyContext:
     """
-    ConversationContext implementation backed by the architectural
+    ConversationContext DUCK TYPE implementation backed by the architectural
     ontology's KnowledgeGraph, IntegrityRules, and RuleEvaluator.
 
     This class satisfies the ConversationContext protocol via structural

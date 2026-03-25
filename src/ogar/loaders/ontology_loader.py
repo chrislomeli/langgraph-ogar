@@ -6,7 +6,7 @@ including all nodes, edges, and traceability relationships.
 """
 from conversation_engine.storage import KnowledgeGraph
 from conversation_engine.models.base import BaseEdge
-from conversation_engine.examples.ontology_data import (
+from ogar.examples import (
     get_feature,
     get_goals,
     get_guiding_principles,

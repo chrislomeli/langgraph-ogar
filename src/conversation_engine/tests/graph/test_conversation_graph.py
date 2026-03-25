@@ -11,93 +11,28 @@ Covers:
 - Router logic
 - Domain-agnosticism: fake context proves the loop has no domain imports
 """
-import pytest
-
-from langchain_core.messages import HumanMessage
 
 from conversation_engine.graph.context import (
     ConversationContext,
     Finding,
     ValidationResult,
 )
-from conversation_engine.graph.state import ConversationState
 from conversation_engine.graph.nodes import validate, converse
 from conversation_engine.graph.builder import (
     build_conversation_graph,
     route_after_converse,
     MAX_TURNS,
 )
-from conversation_engine.models.domain_config import DomainConfig
-from conversation_engine.graph.architectural_context import (
-    ArchitecturalOntologyContext,
-)
-from conversation_engine.models.rules import IntegrityRule
 from conversation_engine.storage.graph import KnowledgeGraph
 from conversation_engine.fixtures import (
+    goal_req_rule,
+    req_cap_rule,
+    make_context,
+    make_state,
     create_graph_with_gaps,
     create_graph_complete,
     create_minimal_graph,
 )
-
-
-# ── Helpers ──────────────────────────────────────────────────────────
-
-def _goal_req_rule() -> IntegrityRule:
-    """Standard rule: every goal must have ≥1 SATISFIED_BY → requirement."""
-    return IntegrityRule(
-        id="rule-goal-req",
-        name="Goal → Requirement",
-        description="Every goal must have at least one requirement",
-        applies_to_node_type="goal",
-        rule_type="minimum_outgoing_edge_count",
-        edge_type="SATISFIED_BY",
-        target_node_types=["requirement"],
-        minimum_count=1,
-        severity="high",
-        failure_message_template="Goal '{subject_name}' has no requirements.",
-    )
-
-
-def _req_cap_rule() -> IntegrityRule:
-    """Standard rule: every requirement must have ≥1 REALIZED_BY → capability."""
-    return IntegrityRule(
-        id="rule-req-cap",
-        name="Requirement → Capability",
-        description="Every requirement must have at least one capability",
-        applies_to_node_type="requirement",
-        rule_type="minimum_outgoing_edge_count",
-        edge_type="REALIZED_BY",
-        target_node_types=["capability"],
-        minimum_count=1,
-        severity="medium",
-        failure_message_template="Requirement '{subject_name}' has no capabilities.",
-    )
-
-
-def _make_context(
-    graph: KnowledgeGraph,
-    rules: list | None = None,
-) -> ArchitecturalOntologyContext:
-    """Build an ArchitecturalOntologyContext for testing."""
-    config = DomainConfig(
-        project_name="test",
-        knowledge_graph=graph,
-        rules=rules or [_goal_req_rule()],
-    )
-    return ArchitecturalOntologyContext(config)
-
-
-def _make_state(graph: KnowledgeGraph, rules=None) -> dict:
-    """Build a minimal input dict for the conversation graph."""
-    return {
-        "context": _make_context(graph, rules),
-        "session_id": "test-session",
-        "findings": [],
-        "messages": [],
-        "current_turn": 0,
-        "status": "running",
-        "preflight_passed": False,
-    }
 
 
 # ── Node unit tests ─────────────────────────────────────────────────
@@ -107,7 +42,7 @@ class TestValidateNode:
 
     def test_complete_graph_no_findings(self):
         """Complete graph produces no open findings."""
-        state = _make_state(create_graph_complete())
+        state = make_state(create_graph_complete())
         result = validate(state)
 
         assert result["status"] == "running"
@@ -115,7 +50,7 @@ class TestValidateNode:
 
     def test_graph_with_gaps_produces_findings(self):
         """Graph with gaps produces findings for each violation."""
-        state = _make_state(create_graph_with_gaps())
+        state = make_state(create_graph_with_gaps())
         result = validate(state)
 
         assert len(result["findings"]) > 0
@@ -134,7 +69,7 @@ class TestValidateNode:
             resolved=True,
             conversation_turn_id="turn-1",
         )
-        state = _make_state(create_graph_with_gaps())
+        state = make_state(create_graph_with_gaps())
         state["findings"] = [resolved]
 
         result = validate(state)
@@ -148,7 +83,7 @@ class TestConverseNode:
 
     def test_no_findings_positive_message(self):
         """When no findings, converse gives a positive summary."""
-        state = _make_state(create_graph_complete())
+        state = make_state(create_graph_complete())
         state["findings"] = []
 
         result = converse(state)
@@ -159,7 +94,7 @@ class TestConverseNode:
 
     def test_with_findings_lists_issues(self):
         """When findings exist, converse summarises them."""
-        state = _make_state(create_graph_with_gaps())
+        state = make_state(create_graph_with_gaps())
         state["findings"] = [
             Finding(
                 id="f1",
@@ -177,14 +112,14 @@ class TestConverseNode:
         assert "high" in content.lower()
 
     def test_increments_turn(self):
-        state = _make_state(create_minimal_graph())
+        state = make_state(create_minimal_graph())
         state["current_turn"] = 2
 
         result = converse(state)
         assert result["current_turn"] == 3
 
     def test_starts_at_zero(self):
-        state = _make_state(create_minimal_graph())
+        state = make_state(create_minimal_graph())
 
         result = converse(state)
         assert result["current_turn"] == 1
@@ -196,14 +131,14 @@ class TestRouter:
     """Test route_after_converse logic."""
 
     def test_exits_when_no_open_findings(self):
-        state = _make_state(create_graph_complete())
+        state = make_state(create_graph_complete())
         state["findings"] = []
         state["current_turn"] = 1
 
         assert route_after_converse(state) == "__end__"
 
     def test_loops_when_open_findings_remain(self):
-        state = _make_state(create_graph_with_gaps())
+        state = make_state(create_graph_with_gaps())
         state["findings"] = [
             Finding(
                 id="f1",
@@ -218,7 +153,7 @@ class TestRouter:
         assert route_after_converse(state) == "validate"
 
     def test_exits_on_max_turns(self):
-        state = _make_state(create_graph_with_gaps())
+        state = make_state(create_graph_with_gaps())
         state["findings"] = [
             Finding(
                 id="f1",
@@ -233,13 +168,13 @@ class TestRouter:
         assert route_after_converse(state) == "__end__"
 
     def test_exits_on_complete_status(self):
-        state = _make_state(create_graph_complete())
+        state = make_state(create_graph_complete())
         state["status"] = "complete"
 
         assert route_after_converse(state) == "__end__"
 
     def test_exits_on_error_status(self):
-        state = _make_state(create_graph_complete())
+        state = make_state(create_graph_complete())
         state["status"] = "error"
 
         assert route_after_converse(state) == "__end__"
@@ -253,7 +188,7 @@ class TestConversationGraphIntegration:
     def test_complete_graph_single_pass(self):
         """A complete graph should exit after one pass with no issues."""
         graph = build_conversation_graph()
-        state = _make_state(create_graph_complete())
+        state = make_state(create_graph_complete())
 
         result = graph.invoke(state)
 
@@ -267,7 +202,7 @@ class TestConversationGraphIntegration:
     def test_graph_with_gaps_finds_violations(self):
         """A graph with gaps should produce findings."""
         graph = build_conversation_graph()
-        state = _make_state(create_graph_with_gaps())
+        state = make_state(create_graph_with_gaps())
 
         result = graph.invoke(state)
 
@@ -280,9 +215,9 @@ class TestConversationGraphIntegration:
     def test_multiple_rules(self):
         """Test graph with multiple rules finds violations from each."""
         graph = build_conversation_graph()
-        state = _make_state(
+        state = make_state(
             create_graph_with_gaps(),
-            rules=[_goal_req_rule(), _req_cap_rule()],
+            rules=[goal_req_rule(), req_cap_rule()],
         )
 
         result = graph.invoke(state)
@@ -298,7 +233,7 @@ class TestConversationGraphIntegration:
     def test_minimal_graph_passes(self):
         """Minimal graph with matching rule should pass."""
         graph = build_conversation_graph()
-        state = _make_state(create_minimal_graph())
+        state = make_state(create_minimal_graph())
 
         result = graph.invoke(state)
 
@@ -308,7 +243,7 @@ class TestConversationGraphIntegration:
     def test_turn_counter_advances(self):
         """Turn counter should advance each loop iteration."""
         graph = build_conversation_graph()
-        state = _make_state(create_graph_with_gaps())
+        state = make_state(create_graph_with_gaps())
 
         result = graph.invoke(state)
 
@@ -317,7 +252,7 @@ class TestConversationGraphIntegration:
     def test_session_id_preserved(self):
         """Session ID should pass through unchanged."""
         graph = build_conversation_graph()
-        state = _make_state(create_graph_complete())
+        state = make_state(create_graph_complete())
         state["session_id"] = "my-unique-session"
 
         result = graph.invoke(state)

@@ -3,14 +3,13 @@ Tests for RuleEvaluator.
 
 Validates that integrity rules are correctly evaluated against graph state.
 """
-import pytest
 
-from conversation_engine.models import Goal, Requirement, Capability, Component
+from conversation_engine.models import Goal, Requirement, Component
 from conversation_engine.models.base import BaseEdge
 from conversation_engine.models.rules import IntegrityRule
 from conversation_engine.storage import KnowledgeGraph
 from conversation_engine.validation import RuleEvaluator
-from conversation_engine.fixtures import (
+from ogar.fixtures import (
     create_graph_with_gaps,
     create_graph_complete,
     create_graph_partial_coverage,

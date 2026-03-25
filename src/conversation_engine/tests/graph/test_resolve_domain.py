@@ -13,97 +13,18 @@ from __future__ import annotations
 
 import pytest
 
-from conversation_engine.graph import ConversationState
 from conversation_engine.graph.nodes import resolve_domain
 from conversation_engine.graph.builder import route_after_resolve_domain
 from conversation_engine.graph.architectural_context import (
     ArchitecturalOntologyContext,
 )
-from conversation_engine.infrastructure.llm.architectural_quiz import ARCHITECTURAL_QUIZ
-from conversation_engine.models.domain_config import DomainConfig
 from conversation_engine.storage.project_store import InMemoryProjectStore
-from conversation_engine.storage.graph import KnowledgeGraph
-from conversation_engine.models.rules import IntegrityRule
-from conversation_engine.models import Goal, Requirement
-from conversation_engine.models.base import BaseEdge
-from conversation_engine.infrastructure.human import (
-    HumanRequest,
-    HumanResponse,
-    MockHuman,
+from conversation_engine.infrastructure.human import MockHuman
+from conversation_engine.fixtures import (
+    sample_config,
+    partial_config,
+    minimal_state,
 )
-
-
-# ── Helpers ──────────────────────────────────────────────────────────
-
-def _sample_config() -> DomainConfig:
-    g = KnowledgeGraph()
-    g.add_node(Goal(id="g1", name="Goal 1", statement="A goal"))
-    g.add_node(Requirement(id="r1", name="Req 1"))
-    g.add_edge(BaseEdge(edge_type="SATISFIED_BY", source_id="g1", target_id="r1"))
-    return DomainConfig(
-        project_name="test-project",
-        knowledge_graph=g,
-        quiz=list(ARCHITECTURAL_QUIZ),
-        rules=[
-            IntegrityRule(
-                id="rule-goal-req",
-                name="Goal → Requirement",
-                description="Every goal must have at least one requirement",
-                applies_to_node_type="goal",
-                rule_type="minimum_outgoing_edge_count",
-                edge_type="SATISFIED_BY",
-                target_node_types=["requirement"],
-                minimum_count=1,
-                severity="high",
-                failure_message_template="Goal '{subject_name}' has no requirements.",
-            ),
-        ],
-        system_prompt="Test system prompt.",
-    )
-
-def _partial_config() -> DomainConfig:
-    g = KnowledgeGraph()
-    g.add_node(Goal(id="g1", name="Goal 1", statement="A goal"))
-    g.add_node(Requirement(id="r1", name="Req 1"))
-    g.add_edge(BaseEdge(edge_type="SATISFIED_BY", source_id="g1", target_id="r1"))
-    return DomainConfig(
-        project_name="test-project",
-        knowledge_graph=g,
-        rules=[
-            IntegrityRule(
-                id="rule-goal-req",
-                name="Goal → Requirement",
-                description="Every goal must have at least one requirement",
-                applies_to_node_type="goal",
-                rule_type="minimum_outgoing_edge_count",
-                edge_type="SATISFIED_BY",
-                target_node_types=["requirement"],
-                minimum_count=1,
-                severity="high",
-                failure_message_template="Goal '{subject_name}' has no requirements.",
-            ),
-        ],
-        system_prompt="Test system prompt.",
-    )
-def _minimal_state(**overrides) -> ConversationState:
-    """Build a minimal ConversationState dict with sensible defaults."""
-    state: ConversationState = {
-        "context": None,
-        "session_id": "test-session",
-        "project_name": None,
-        "project_store": None,
-        "llm": None,
-        "human": None,
-        "tool_client": None,
-        "findings": [],
-        "messages": [],
-        "current_turn": 0,
-        "status": "running",
-        "node_result": None,
-        "preflight_passed": False,
-    }
-    state.update(overrides)
-    return state
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -114,17 +35,17 @@ class TestResolveDomainPassThrough:
     """Scenario 1: context already provided."""
 
     def test_context_set_returns_running(self):
-        config = _sample_config()
+        config = sample_config()
         ctx = ArchitecturalOntologyContext(config)
-        state = _minimal_state(context=ctx)
+        state = minimal_state(context=ctx)
         result = resolve_domain(state)
         assert result["status"] == "running"
         assert "context" not in result  # no change needed
 
     def test_context_set_does_not_overwrite(self):
-        config = _sample_config()
+        config = sample_config()
         ctx = ArchitecturalOntologyContext(config)
-        state = _minimal_state(context=ctx, project_name="other", project_store=InMemoryProjectStore())
+        state = minimal_state(context=ctx, project_name="other", project_store=InMemoryProjectStore())
         result = resolve_domain(state)
         assert result["status"] == "running"
         assert "context" not in result
@@ -134,9 +55,9 @@ class TestResolveDomainFromStore:
     """Scenario 2: load from store by project_name."""
     def test_load_partial_project(self):
         store = InMemoryProjectStore()
-        config = _partial_config()
+        config = partial_config()
         store.save(config)
-        state = _minimal_state(project_name="test-project", project_store=store)
+        state = minimal_state(project_name="test-project", project_store=store)
         result = resolve_domain(state)
 
         assert result["status"] == "running"
@@ -149,9 +70,9 @@ class TestResolveDomainFromStore:
 
     def test_load_existing_project(self):
         store = InMemoryProjectStore()
-        config = _sample_config()
+        config = sample_config()
         store.save(config)
-        state = _minimal_state(project_name="test-project", project_store=store)
+        state = minimal_state(project_name="test-project", project_store=store)
         result = resolve_domain(state)
 
         assert result["status"] == "running"
@@ -164,7 +85,7 @@ class TestResolveDomainFromStore:
 
     def test_project_not_found_returns_error(self):
         store = InMemoryProjectStore()
-        state = _minimal_state(project_name="nonexistent", project_store=store)
+        state = minimal_state(project_name="nonexistent", project_store=store)
         result = resolve_domain(state)
 
         assert result["status"] == "error"
@@ -177,7 +98,7 @@ class TestResolveDomainAskHuman:
 
     def test_human_provides_name(self):
         human = MockHuman(responses=["my-project"])
-        state = _minimal_state(human=human)
+        state = minimal_state(human=human)
         result = resolve_domain(state)
 
         assert result["status"] == "needs_project_name"
@@ -185,7 +106,7 @@ class TestResolveDomainAskHuman:
 
     def test_human_provides_name_with_whitespace(self):
         human = MockHuman(responses=["  padded-name  "])
-        state = _minimal_state(human=human)
+        state = minimal_state(human=human)
         result = resolve_domain(state)
 
         assert result["project_name"] == "padded-name"
@@ -195,13 +116,13 @@ class TestResolveDomainFallback:
     """Fallback: nothing to work with."""
 
     def test_no_context_no_name_no_human(self):
-        state = _minimal_state()
+        state = minimal_state()
         result = resolve_domain(state)
         assert result["status"] == "error"
         assert "Cannot start" in result["messages"][0].content
 
     def test_no_context_no_name_no_store(self):
-        state = _minimal_state(project_name="test-project")
+        state = minimal_state(project_name="test-project")
         result = resolve_domain(state)
         assert result["status"] == "error"
 
@@ -234,11 +155,11 @@ class TestResolveDomainIntegration:
 
     def test_human_name_then_store_load(self):
         store = InMemoryProjectStore()
-        store.save(_sample_config())
+        store.save(sample_config())
         human = MockHuman(responses=["test-project"])
 
         # Turn 1: no project_name, human provides one
-        state = _minimal_state(project_store=store, human=human)
+        state = minimal_state(project_store=store, human=human)
         result1 = resolve_domain(state)
         assert result1["status"] == "needs_project_name"
         assert result1["project_name"] == "test-project"

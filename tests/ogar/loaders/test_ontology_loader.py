@@ -3,7 +3,7 @@ Tests for ontology data loader.
 
 Validates that WHITEBOARD_ONTOLOGY data loads correctly into graph.
 """
-from conversation_engine.loaders import load_ontology_graph
+from ogar.loaders import load_ontology_graph
 from conversation_engine.storage import GraphQueries
 
 

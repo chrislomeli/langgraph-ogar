@@ -83,7 +83,7 @@ Structured output format for AI findings:
 The `examples/ontology_data.py` module provides example data from WHITEBOARD_ONTOLOGY.md:
 
 ```python
-from conversation_engine.examples.ontology_data import (
+from ogar.examples import (
     get_goals,
     get_requirements,
     get_capabilities,
@@ -243,7 +243,7 @@ from conversation_engine.graph import (
     ArchitecturalOntologyContext,
     DomainConfig,
 )
-from conversation_engine.fixtures import create_graph_with_gaps
+from ogar.fixtures import create_graph_with_gaps
 from conversation_engine.models.rules import IntegrityRule
 
 config = DomainConfig(

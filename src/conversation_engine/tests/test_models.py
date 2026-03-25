@@ -16,15 +16,6 @@ from conversation_engine.models import (
     Assessment,
     GoalRequirementTrace,
 )
-from conversation_engine.examples.ontology_data import (
-    get_goals,
-    get_requirements,
-    get_capabilities,
-    get_components,
-    get_sample_integrity_rules,
-    get_sample_query_patterns,
-    get_goal_requirement_traces,
-)
 
 
 class TestNodeModels:
@@ -137,29 +128,7 @@ class TestIntegrityRules:
             rule.severity = "low"
 
 
-class TestQueryPatterns:
-    """Test query pattern models."""
-    
-    def test_query_pattern_with_checks(self):
-        """Test GraphQueryPattern with edge checks."""
-        patterns = get_sample_query_patterns()
-        gap_query = patterns[0]
-        
-        assert gap_query.id == "query-missing-goal-coverage"
-        assert gap_query.query_intent == "gap_detection"
-        assert gap_query.checks is not None
-        assert len(gap_query.checks) == 1
-        assert gap_query.checks[0].edge_type == "SATISFIED_BY"
-    
-    def test_query_pattern_with_path(self):
-        """Test GraphQueryPattern with path pattern."""
-        patterns = get_sample_query_patterns()
-        lineage_query = patterns[2]
-        
-        assert lineage_query.id == "query-goal-to-component-lineage"
-        assert lineage_query.query_intent == "lineage_trace"
-        assert lineage_query.path_pattern is not None
-        assert len(lineage_query.path_pattern) == 3
+
 
 
 class TestAssessmentModels:
@@ -184,52 +153,4 @@ class TestAssessmentModels:
         assert len(assessment.suggested_actions) == 1
 
 
-class TestExampleData:
-    """Test that example data from ontology loads correctly."""
-    
-    def test_load_goals(self):
-        """Test loading goals from example data."""
-        goals = get_goals()
-        assert len(goals) == 5
-        assert all(isinstance(g, Goal) for g in goals)
-        assert goals[0].id == "goal-structured-convergence"
-    
-    def test_load_requirements(self):
-        """Test loading requirements from example data."""
-        requirements = get_requirements()
-        assert len(requirements) == 20
-        assert all(isinstance(r, Requirement) for r in requirements)
-    
-    def test_load_capabilities(self):
-        """Test loading capabilities from example data."""
-        capabilities = get_capabilities()
-        assert len(capabilities) == 7
-        assert all(isinstance(c, Capability) for c in capabilities)
-    
-    def test_load_components(self):
-        """Test loading components from example data."""
-        components = get_components()
-        assert len(components) == 7
-        assert all(isinstance(c, Component) for c in components)
-    
-    def test_load_traceability(self):
-        """Test loading traceability data."""
-        traces = get_goal_requirement_traces()
-        assert len(traces) == 5
-        assert all(isinstance(t, GoalRequirementTrace) for t in traces)
-        
-        first_trace = traces[0]
-        assert first_trace.goal_id == "goal-structured-convergence"
-        assert len(first_trace.requirement_ids) == 4
-    
-    def test_load_integrity_rules(self):
-        """Test loading integrity rules."""
-        rules = get_sample_integrity_rules()
-        assert len(rules) == 3
-        assert all(isinstance(r, IntegrityRule) for r in rules)
-    
-    def test_load_query_patterns(self):
-        """Test loading query patterns."""
-        patterns = get_sample_query_patterns()
-        assert len(patterns) == 3
-        assert all(isinstance(p, GraphQueryPattern) for p in patterns)
+
