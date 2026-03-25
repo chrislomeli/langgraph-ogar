@@ -2,11 +2,15 @@
 Conversation subgraph builder.
 
 Topology:
-    START → preflight → route_after_preflight → validate → converse → route
-    route_after_preflight → validate   (preflight passes or was skipped)
-    route_after_preflight → END        (preflight fails → status='error')
-    route_after_converse  → validate   (open findings remain, turns < max)
-    route_after_converse  → END        (complete, max turns, error, or hand_off)
+    START → resolve_domain → route_after_resolve_domain →
+        preflight → route_after_preflight → validate → converse → route
+    route_after_resolve_domain → preflight        (context ready)
+    route_after_resolve_domain → resolve_domain   (human gave name, loop back)
+    route_after_resolve_domain → END              (error)
+    route_after_preflight      → validate         (preflight passes or was skipped)
+    route_after_preflight      → END              (preflight fails → status='error')
+    route_after_converse       → validate         (open findings remain, turns < max)
+    route_after_converse       → END              (complete, max turns, error, or hand_off)
 
 The `converse` node is a collaborative AI/human exchange:
   1. LLM analyzes findings + message history → produces AI message
@@ -31,7 +35,7 @@ from typing import Literal, Optional, Sequence
 from langgraph.graph import START, END
 
 from conversation_engine.graph.state import ConversationState
-from conversation_engine.graph.nodes import preflight, validate, converse
+from conversation_engine.graph.nodes import resolve_domain, preflight, validate, converse
 from conversation_engine.infrastructure.instrumented_graph import (
     InstrumentedGraph,
     Interceptor,
@@ -46,6 +50,23 @@ MAX_TURNS = 5
 
 
 # ── Routers ──────────────────────────────────────────────────────────
+
+def route_after_resolve_domain(
+    state: ConversationState,
+) -> Literal["preflight", "resolve_domain", "__end__"]:
+    """
+    After resolve_domain:
+    - "running"             → context is ready, proceed to preflight
+    - "needs_project_name"  → human gave a name, loop back to resolve
+    - "error"               → exit
+    """
+    status = state.get("status", "running")
+    if status == "error":
+        return "__end__"
+    if status == "needs_project_name":
+        return "resolve_domain"
+    return "preflight"
+
 
 def route_after_preflight(state: ConversationState) -> Literal["validate", "__end__"]:
     """
@@ -116,12 +137,14 @@ def build_conversation_graph(
     )
 
     # Nodes
+    builder.add_node("resolve_domain", resolve_domain)
     builder.add_node("preflight", preflight)
     builder.add_node("validate", validate)
     builder.add_node("converse", converse)
 
     # Edges
-    builder.add_edge(START, "preflight")
+    builder.add_edge(START, "resolve_domain")
+    builder.add_conditional_edges("resolve_domain", route_after_resolve_domain)
     builder.add_conditional_edges("preflight", route_after_preflight)
     builder.add_edge("validate", "converse")
     builder.add_conditional_edges("converse", route_after_converse)

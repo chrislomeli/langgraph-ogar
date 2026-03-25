@@ -353,3 +353,72 @@ def converse(state: ConversationState) -> Dict[str, Any]:
     return _converse_simple(state)
 
 
+# ── resolve_domain ──────────────────────────────────────────────────
+
+def resolve_domain(state: ConversationState) -> Dict[str, Any]:
+    """
+    Resolve the DomainConfig into a ready-to-use ConversationContext.
+
+    This is the first node in the graph.  It ensures that ``context``
+    is populated before preflight / validate / converse run.
+
+    Scenarios
+    ---------
+    1. ``context`` already set → pass through (caller built it themselves).
+    2. ``project_name`` + ``project_store`` → load from store, build context.
+    3. Neither → ask the human for a project name (via CallHuman), then
+       return ``status="needs_project_name"`` so the router loops back.
+
+    Returns a partial state update.
+    """
+    from conversation_engine.graph.architectural_context import (
+        ArchitecturalOntologyContext,
+    )
+
+    # ── Scenario 1: context already provided ──────────────────────
+    if state.get("context") is not None:
+        logger.debug("resolve_domain: context already set — pass through")
+        return {"status": "running"}
+
+    # ── Scenario 2: load from store by project name ───────────────
+    project_name = state.get("project_name")
+    store = state.get("project_store")
+
+    if project_name and store:
+        config = store.load(project_name)
+        if config is not None:
+            ctx = ArchitecturalOntologyContext(config)
+            logger.info("resolve_domain: loaded project '%s' from store", project_name)
+            return {"context": ctx, "status": "running"}
+        else:
+            logger.warning("resolve_domain: project '%s' not found in store", project_name)
+            return {
+                "status": "error",
+                "messages": [
+                    AIMessage(content=f"Project '{project_name}' not found in the store.")
+                ],
+            }
+
+    # ── Scenario 3: ask the human for a project name ─────────────
+    human: Optional[CallHuman] = state.get("human")
+    if human and not project_name:
+        response = human(HumanRequest(
+            prompt="Which project would you like to work on? Please provide the project name.",
+            context={"reason": "no_project_name"},
+            allow_skip=False,
+        ))
+        if response.content and not response.skipped:
+            logger.info("resolve_domain: human provided project name '%s'", response.content)
+            return {
+                "project_name": response.content.strip(),
+                "status": "needs_project_name",
+            }
+
+    # ── Fallback: cannot resolve ──────────────────────────────────
+    logger.error("resolve_domain: no context, no project_name, and no human to ask")
+    return {
+        "status": "error",
+        "messages": [
+            AIMessage(content="Cannot start: no project name or domain configuration provided.")
+        ],
+    }

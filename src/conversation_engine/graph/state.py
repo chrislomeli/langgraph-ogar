@@ -26,6 +26,7 @@ from conversation_engine.infrastructure.node_validation import NodeResult
 from conversation_engine.infrastructure.llm import CallLLM
 from conversation_engine.infrastructure.human import CallHuman
 from conversation_engine.infrastructure.tool_client import ToolClient
+from conversation_engine.storage.project_store import ProjectStore
 
 
 # ── Subgraph contract ────────────────────────────────────────────────
@@ -47,9 +48,13 @@ class ConversationOutput(TypedDict):
 # ── Internal working state ───────────────────────────────────────────
 
 class ConversationState(TypedDict):
-    # Injected domain context — the loop reads from it, never mutates it
-    context: ConversationContext
+    # Injected domain context — set by resolve_domain, read by all downstream nodes
+    context: Optional[ConversationContext]
     session_id: str
+
+    # Domain resolution inputs — resolve_domain uses these to build context
+    project_name: Optional[str]
+    project_store: Optional[ProjectStore]
 
     # Injected LLM callable — optional, nodes fall back to stub if absent
     llm: Optional[CallLLM]
