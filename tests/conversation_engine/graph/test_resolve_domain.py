@@ -13,11 +13,13 @@ from __future__ import annotations
 
 import pytest
 
+from conversation_engine.graph import ConversationState
 from conversation_engine.graph.nodes import resolve_domain
 from conversation_engine.graph.builder import route_after_resolve_domain
 from conversation_engine.graph.architectural_context import (
     ArchitecturalOntologyContext,
 )
+from conversation_engine.infrastructure.llm.architectural_quiz import ARCHITECTURAL_QUIZ
 from conversation_engine.models.domain_config import DomainConfig
 from conversation_engine.storage.project_store import InMemoryProjectStore
 from conversation_engine.storage.graph import KnowledgeGraph
@@ -41,6 +43,7 @@ def _sample_config() -> DomainConfig:
     return DomainConfig(
         project_name="test-project",
         knowledge_graph=g,
+        quiz=list(ARCHITECTURAL_QUIZ),
         rules=[
             IntegrityRule(
                 id="rule-goal-req",
@@ -58,10 +61,33 @@ def _sample_config() -> DomainConfig:
         system_prompt="Test system prompt.",
     )
 
-
-def _minimal_state(**overrides) -> dict:
+def _partial_config() -> DomainConfig:
+    g = KnowledgeGraph()
+    g.add_node(Goal(id="g1", name="Goal 1", statement="A goal"))
+    g.add_node(Requirement(id="r1", name="Req 1"))
+    g.add_edge(BaseEdge(edge_type="SATISFIED_BY", source_id="g1", target_id="r1"))
+    return DomainConfig(
+        project_name="test-project",
+        knowledge_graph=g,
+        rules=[
+            IntegrityRule(
+                id="rule-goal-req",
+                name="Goal → Requirement",
+                description="Every goal must have at least one requirement",
+                applies_to_node_type="goal",
+                rule_type="minimum_outgoing_edge_count",
+                edge_type="SATISFIED_BY",
+                target_node_types=["requirement"],
+                minimum_count=1,
+                severity="high",
+                failure_message_template="Goal '{subject_name}' has no requirements.",
+            ),
+        ],
+        system_prompt="Test system prompt.",
+    )
+def _minimal_state(**overrides) -> ConversationState:
     """Build a minimal ConversationState dict with sensible defaults."""
-    state = {
+    state: ConversationState = {
         "context": None,
         "session_id": "test-session",
         "project_name": None,
@@ -106,12 +132,25 @@ class TestResolveDomainPassThrough:
 
 class TestResolveDomainFromStore:
     """Scenario 2: load from store by project_name."""
+    def test_load_partial_project(self):
+        store = InMemoryProjectStore()
+        config = _partial_config()
+        store.save(config)
+        state = _minimal_state(project_name="test-project", project_store=store)
+        result = resolve_domain(state)
+
+        assert result["status"] == "running"
+        assert "context" in result
+        ctx = result["context"]
+        assert isinstance(ctx, ArchitecturalOntologyContext)
+        assert ctx.graph.node_count() == 2
+        assert len(ctx.rules) == 1
+        assert ctx.system_prompt == "Test system prompt."
 
     def test_load_existing_project(self):
         store = InMemoryProjectStore()
         config = _sample_config()
         store.save(config)
-
         state = _minimal_state(project_name="test-project", project_store=store)
         result = resolve_domain(state)
 
