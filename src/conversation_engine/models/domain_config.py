@@ -35,7 +35,7 @@ class DomainConfig:
     """
     Complete domain specification for a project.
 
-    This is a pure value object — no behaviour, no side-effects.
+    This is a pure value object — no behavior, no side-effects.
     The ``ConversationContext`` implementation *consumes* a DomainConfig;
     graph nodes *inspect* it to decide what still needs gathering.
 

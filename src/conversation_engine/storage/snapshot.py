@@ -79,7 +79,8 @@ class DependencySpec(BaseModel):
 
 # ── Top-level snapshot ─────────────────────────────────────────────
 
-class ProjectSnapshot(BaseModel):
+) class ProjectSnapshot(BaseModel):
+
     """
     Flat, business-level representation of a project's knowledge graph.
 
