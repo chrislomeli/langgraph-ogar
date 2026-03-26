@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Protocol, runtime_checkable
 
-from conversation_engine.infrastructure.llm.validator import ValidationQuiz
+from conversation_engine.models.validation_quiz import ValidationQuiz
 
 
 # ── Domain-agnostic types ───────────────────────────────────────────

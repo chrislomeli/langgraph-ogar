@@ -22,7 +22,7 @@ from conversation_engine.models.rules import IntegrityRule
 from conversation_engine.models.queries import GraphQueryPattern
 from conversation_engine.storage.graph import KnowledgeGraph
 from conversation_engine.validation.evaluator import RuleEvaluator
-from conversation_engine.infrastructure.llm.validator import ValidationQuiz
+from conversation_engine.models.validation_quiz import ValidationQuiz
 from conversation_engine.infrastructure.llm.architectural_quiz import (
     ARCHITECTURAL_SYSTEM_PROMPT,
     ARCHITECTURAL_QUIZ,

@@ -31,10 +31,10 @@ from conversation_engine.infrastructure.llm.openai_adapter import (
 from conversation_engine.infrastructure.llm.validator import (
     LLMValidator,
     LLMValidatorReport,
-    ValidationQuiz,
     QuizResult,
     quiz_report_summary,
 )
+from conversation_engine.models.validation_quiz import ValidationQuiz
 
 __all__ = [
     "CallLLM",

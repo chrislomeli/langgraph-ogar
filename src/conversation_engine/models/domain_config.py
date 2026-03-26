@@ -24,9 +24,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from conversation_engine.infrastructure.llm.validator import ValidationQuiz
 from conversation_engine.models.queries import GraphQueryPattern
 from conversation_engine.models.rules import IntegrityRule
+from conversation_engine.models.validation_quiz import ValidationQuiz
 from conversation_engine.storage.graph import KnowledgeGraph
 
 
@@ -56,6 +56,20 @@ class DomainConfig:
     query_patterns: Optional[List[GraphQueryPattern]] = None
     system_prompt: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+    # # ── Convenience Methods ────────────────────────────────────────────
+
+    def with_project_name(self, project_name: str) -> "DomainConfig":
+        """Return a new DomainConfig with the project_name changed."""
+        return DomainConfig(
+            project_name=project_name,
+            knowledge_graph=self.knowledge_graph,
+            rules=self.rules,
+            quiz=self.quiz,
+            query_patterns=self.query_patterns,
+            system_prompt=self.system_prompt,
+            metadata=self.metadata,
+        )
 
     # ── Serialisation ────────────────────────────────────────────────
 

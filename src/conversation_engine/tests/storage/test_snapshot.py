@@ -39,10 +39,10 @@ from conversation_engine.storage.snapshot_facade import (
     SnapshotConversionError,
     _slugify,
 )
-from conversation_engine.infrastructure.tool_client.knowledge_graph_tools import (
-    KnowledgeGraphInput,
-    KnowledgeGraphOutput,
-    make_knowledge_graph_tool,
+from conversation_engine.infrastructure.tool_client.project_graph_tools import (
+    ProjectGraphInput,
+    ProjectGraphOutput,
+    make_project_graph_tool,
 )
 
 
@@ -362,7 +362,7 @@ class TestKnowledgeGraphTool:
 
     def _make_tool(self):
         store = InMemoryProjectStore()
-        spec = make_knowledge_graph_tool(store)
+        spec = make_project_graph_tool(store)
         return spec, store
 
     def test_tool_spec_metadata(self):
@@ -374,7 +374,7 @@ class TestKnowledgeGraphTool:
 
     def test_create_success(self):
         spec, store = self._make_tool()
-        inp = KnowledgeGraphInput(method="CREATE", payload=_sample_snapshot())
+        inp = ProjectGraphInput(method="CREATE", payload=_sample_snapshot())
         out = spec.handler(inp)
         assert out.success is True
         assert "created" in out.message.lower()
@@ -382,14 +382,14 @@ class TestKnowledgeGraphTool:
 
     def test_create_no_payload(self):
         spec, _ = self._make_tool()
-        inp = KnowledgeGraphInput(method="CREATE")
+        inp = ProjectGraphInput(method="CREATE")
         out = spec.handler(inp)
         assert out.success is False
         assert "payload" in out.message.lower()
 
     def test_create_duplicate_fails(self):
         spec, _ = self._make_tool()
-        inp = KnowledgeGraphInput(method="CREATE", payload=_sample_snapshot())
+        inp = ProjectGraphInput(method="CREATE", payload=_sample_snapshot())
         spec.handler(inp)
         out = spec.handler(inp)
         assert out.success is False
@@ -401,15 +401,15 @@ class TestKnowledgeGraphTool:
             project_name="bad",
             requirements=[RequirementSpec(name="R", goal_ref="NoGoal")],
         )
-        inp = KnowledgeGraphInput(method="CREATE", payload=bad_snap)
+        inp = ProjectGraphInput(method="CREATE", payload=bad_snap)
         out = spec.handler(inp)
         assert out.success is False
         assert "invalid snapshot" in out.message.lower()
 
     def test_read_success(self):
         spec, _ = self._make_tool()
-        spec.handler(KnowledgeGraphInput(method="CREATE", payload=_sample_snapshot()))
-        inp = KnowledgeGraphInput(method="READ", key="acme")
+        spec.handler(ProjectGraphInput(method="CREATE", payload=_sample_snapshot()))
+        inp = ProjectGraphInput(method="READ", key="acme")
         out = spec.handler(inp)
         assert out.success is True
         assert out.payload is not None
@@ -418,46 +418,46 @@ class TestKnowledgeGraphTool:
 
     def test_read_not_found(self):
         spec, _ = self._make_tool()
-        inp = KnowledgeGraphInput(method="READ", key="nope")
+        inp = ProjectGraphInput(method="READ", key="nope")
         out = spec.handler(inp)
         assert out.success is False
         assert "not found" in out.message.lower()
 
     def test_read_no_key(self):
         spec, _ = self._make_tool()
-        inp = KnowledgeGraphInput(method="READ")
+        inp = ProjectGraphInput(method="READ")
         out = spec.handler(inp)
         assert out.success is False
         assert "key" in out.message.lower()
 
     def test_delete_success(self):
         spec, store = self._make_tool()
-        spec.handler(KnowledgeGraphInput(method="CREATE", payload=_sample_snapshot()))
+        spec.handler(ProjectGraphInput(method="CREATE", payload=_sample_snapshot()))
         assert store.exists("acme")
-        inp = KnowledgeGraphInput(method="DELETE", key="acme")
+        inp = ProjectGraphInput(method="DELETE", key="acme")
         out = spec.handler(inp)
         assert out.success is True
         assert not store.exists("acme")
 
     def test_delete_not_found(self):
         spec, _ = self._make_tool()
-        inp = KnowledgeGraphInput(method="DELETE", key="nope")
+        inp = ProjectGraphInput(method="DELETE", key="nope")
         out = spec.handler(inp)
         assert out.success is False
 
     def test_delete_no_key(self):
         spec, _ = self._make_tool()
-        inp = KnowledgeGraphInput(method="DELETE")
+        inp = ProjectGraphInput(method="DELETE")
         out = spec.handler(inp)
         assert out.success is False
 
     def test_update_via_delete_then_create(self):
         """MVP update: delete + create."""
         spec, store = self._make_tool()
-        spec.handler(KnowledgeGraphInput(method="CREATE", payload=_sample_snapshot()))
+        spec.handler(ProjectGraphInput(method="CREATE", payload=_sample_snapshot()))
 
         # Delete
-        spec.handler(KnowledgeGraphInput(method="DELETE", key="acme"))
+        spec.handler(ProjectGraphInput(method="DELETE", key="acme"))
         assert not store.exists("acme")
 
         # Create with modified data
@@ -466,11 +466,11 @@ class TestKnowledgeGraphTool:
         updated.requirements.append(
             RequirementSpec(name="New Req", goal_ref="New Goal")
         )
-        out = spec.handler(KnowledgeGraphInput(method="CREATE", payload=updated))
+        out = spec.handler(ProjectGraphInput(method="CREATE", payload=updated))
         assert out.success is True
 
         # Verify
-        read_out = spec.handler(KnowledgeGraphInput(method="READ", key="acme"))
+        read_out = spec.handler(ProjectGraphInput(method="READ", key="acme"))
         assert read_out.payload is not None
         assert len(read_out.payload.goals) == 2
 
@@ -478,8 +478,8 @@ class TestKnowledgeGraphTool:
         """CREATE then READ returns equivalent data."""
         spec, _ = self._make_tool()
         original = _sample_snapshot()
-        spec.handler(KnowledgeGraphInput(method="CREATE", payload=original))
-        out = spec.handler(KnowledgeGraphInput(method="READ", key="acme"))
+        spec.handler(ProjectGraphInput(method="CREATE", payload=original))
+        out = spec.handler(ProjectGraphInput(method="READ", key="acme"))
 
         assert out.payload is not None
         restored = out.payload
@@ -496,7 +496,7 @@ class TestKnowledgeGraphTool:
             LocalToolClient,
         )
         store = InMemoryProjectStore()
-        spec = make_knowledge_graph_tool(store)
+        spec = make_project_graph_tool(store)
         reg = ToolRegistry()
         reg.register(spec)
         client = LocalToolClient(reg)

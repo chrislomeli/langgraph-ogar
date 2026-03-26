@@ -30,10 +30,10 @@ from conversation_engine.infrastructure.tool_client.conversation_tools import (
     make_revalidate_tool,
     make_mark_complete_tool,
 )
-from conversation_engine.infrastructure.tool_client.knowledge_graph_tools import (
-    KnowledgeGraphInput,
-    KnowledgeGraphOutput,
-    make_knowledge_graph_tool,
+from conversation_engine.infrastructure.tool_client.project_graph_tools import (
+    ProjectGraphInput,
+    ProjectGraphOutput,
+    make_project_graph_tool,
 )
 from conversation_engine.infrastructure.tool_client.langchain_bridge import (
     specs_to_langchain_tools,
@@ -60,9 +60,9 @@ __all__ = [
     "make_revalidate_tool",
     "make_mark_complete_tool",
     # Knowledge graph tools
-    "KnowledgeGraphInput",
-    "KnowledgeGraphOutput",
-    "make_knowledge_graph_tool",
+    "ProjectGraphInput",
+    "ProjectGraphOutput",
+    "make_project_graph_tool",
     # LangChain bridge
     "specs_to_langchain_tools",
     "execute_tool_call",

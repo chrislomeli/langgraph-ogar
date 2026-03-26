@@ -20,7 +20,7 @@ from conversation_engine.models.queries import (
     GraphQueryPattern,
     EdgeCheck,
 )
-from conversation_engine.infrastructure.llm.validator import ValidationQuiz
+from conversation_engine.models.validation_quiz import ValidationQuiz
 from conversation_engine.graph.architectural_context import (
     ArchitecturalOntologyContext,
 )

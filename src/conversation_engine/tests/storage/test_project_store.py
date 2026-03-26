@@ -18,7 +18,7 @@ from conversation_engine.storage.project_store import (
 from conversation_engine.storage.graph import KnowledgeGraph
 from conversation_engine.models.rules import IntegrityRule
 from conversation_engine.models.queries import GraphQueryPattern
-from conversation_engine.infrastructure.llm.validator import ValidationQuiz
+from conversation_engine.models.validation_quiz import ValidationQuiz
 from conversation_engine.graph.architectural_context import (
     ArchitecturalOntologyContext,
 )
@@ -111,6 +111,7 @@ class TestDomainConfig:
     def test_frozen(self):
         cfg = _full_config()
         with pytest.raises(AttributeError):
+            # noinspection PyDataclass
             cfg.project_name = "changed"  # type: ignore[misc]
 
     def test_metadata_defaults_to_empty_dict(self):

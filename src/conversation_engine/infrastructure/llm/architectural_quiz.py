@@ -13,7 +13,7 @@ conversation loop would use when the reason node calls the LLM.
 
 from __future__ import annotations
 
-from conversation_engine.infrastructure.llm.validator import ValidationQuiz
+from conversation_engine.models.validation_quiz import ValidationQuiz
 
 
 # ── System prompt ───────────────────────────────────────────────────
