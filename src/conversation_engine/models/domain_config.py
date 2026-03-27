@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional
 from conversation_engine.models.queries import GraphQueryPattern
 from conversation_engine.models.rules import IntegrityRule
 from conversation_engine.models.validation_quiz import ValidationQuiz
+from conversation_engine.storage import ProjectSpecification
 from conversation_engine.storage.graph import KnowledgeGraph
 
 
@@ -50,7 +51,8 @@ class DomainConfig:
     """
 
     project_name: str
-    knowledge_graph: Optional[KnowledgeGraph] = None
+    knowledge_graph: Optional[KnowledgeGraph] = None  # todo - deprecate this
+    project_specification: Optional[ProjectSpecification] = None
     rules: Optional[List[IntegrityRule]] = None
     quiz: Optional[List[ValidationQuiz]] = None
     query_patterns: Optional[List[GraphQueryPattern]] = None

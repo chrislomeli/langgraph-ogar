@@ -23,8 +23,8 @@ from conversation_engine.models.rules import IntegrityRule
 from conversation_engine.models.validation_quiz import ValidationQuiz
 from conversation_engine.storage.graph import KnowledgeGraph
 from conversation_engine.storage.project_store import ProjectStore
-from conversation_engine.storage.snapshot import ProjectSnapshot
-from conversation_engine.storage.snapshot_facade import (
+from conversation_engine.storage.project_specification import ProjectSpecification
+from conversation_engine.storage.project_graph_facade import (
     snapshot_to_graph,
     graph_to_snapshot,
     SnapshotConversionError,
@@ -85,7 +85,7 @@ class ArchitecturalProjectService:
             return ProjectServiceResult(
                 success=True,
                 message=f"Project '{project_name}' exists but has no knowledge graph.",
-                snapshot=ProjectSnapshot(project_name=project_name),
+                snapshot=ProjectSpecification(project_name=project_name),
             )
         snapshot = graph_to_snapshot(project_name, config.knowledge_graph)
         return ProjectServiceResult(
@@ -94,7 +94,7 @@ class ArchitecturalProjectService:
             snapshot=snapshot,
         )
 
-    def save(self, spec: ProjectSnapshot) -> ProjectServiceResult:
+    def save(self, spec: ProjectSpecification) -> ProjectServiceResult:
         try:
             graph = snapshot_to_graph(spec)
         except SnapshotConversionError as e:

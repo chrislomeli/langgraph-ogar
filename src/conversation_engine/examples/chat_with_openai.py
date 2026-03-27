@@ -47,8 +47,8 @@ if _env_file.exists():
 from conversation_engine.graph.builder import build_conversation_graph
 from conversation_engine.models.rules import IntegrityRule
 from conversation_engine.services.architectural_project_service import ArchitecturalProjectService
-from conversation_engine.storage.snapshot import (
-    ProjectSnapshot,
+from conversation_engine.storage.project_specification import (
+    ProjectSpecification,
     GoalSpec,
     RequirementSpec,
 )
@@ -109,7 +109,7 @@ def build_service() -> ArchitecturalProjectService:
         rules=STANDARD_RULES,
     )
     # Seed with a sample project
-    snapshot = ProjectSnapshot(
+    snapshot = ProjectSpecification(
         project_name=PROJECT_NAME,
         goals=[
             GoalSpec(name="User Authentication", statement="Users can log in securely"),

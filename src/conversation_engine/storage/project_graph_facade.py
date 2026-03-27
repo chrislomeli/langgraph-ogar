@@ -29,8 +29,8 @@ from conversation_engine.models.nodes import (
     Dependency,
 )
 from conversation_engine.storage.graph import KnowledgeGraph
-from conversation_engine.storage.snapshot import (
-    ProjectSnapshot,
+from conversation_engine.storage.project_specification import (
+    ProjectSpecification,
     GoalSpec,
     RequirementSpec,
     CapabilitySpec,
@@ -52,7 +52,7 @@ class SnapshotConversionError(Exception):
     """Raised when a snapshot contains invalid references."""
 
 
-def snapshot_to_graph(snapshot: ProjectSnapshot) -> KnowledgeGraph:
+def snapshot_to_graph(snapshot: ProjectSpecification) -> KnowledgeGraph:
     """
     Convert a ``ProjectSnapshot`` to a ``KnowledgeGraph``.
 
@@ -177,7 +177,7 @@ def snapshot_to_graph(snapshot: ProjectSnapshot) -> KnowledgeGraph:
 
 # ── KnowledgeGraph → Snapshot ──────────────────────────────────────
 
-def graph_to_snapshot(project_name: str, graph: KnowledgeGraph) -> ProjectSnapshot:
+def graph_to_snapshot(project_name: str, graph: KnowledgeGraph) -> ProjectSpecification:
     """
     Convert a ``KnowledgeGraph`` back to a ``ProjectSnapshot``.
 
@@ -286,7 +286,7 @@ def graph_to_snapshot(project_name: str, graph: KnowledgeGraph) -> ProjectSnapsh
         for d in deps_by_id.values()
     ]
 
-    return ProjectSnapshot(
+    return ProjectSpecification(
         project_name=project_name,
         goals=goal_specs,
         requirements=req_specs,

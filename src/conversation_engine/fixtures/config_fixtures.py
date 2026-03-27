@@ -19,7 +19,7 @@ from conversation_engine.models.rules import IntegrityRule
 from conversation_engine.services.architectural_project_service import ArchitecturalProjectService
 from conversation_engine.storage.graph import KnowledgeGraph
 from conversation_engine.storage.project_store import InMemoryProjectStore
-from conversation_engine.storage.snapshot_facade import graph_to_snapshot
+from conversation_engine.storage.project_graph_facade import graph_to_snapshot
 
 
 # ── Rule factories ───────────────────────────────────────────────────

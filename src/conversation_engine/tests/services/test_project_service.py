@@ -26,8 +26,8 @@ from conversation_engine.services.architectural_project_service import (
 from conversation_engine.graph.context import Finding
 from conversation_engine.models.rules import IntegrityRule
 from conversation_engine.storage.project_store import InMemoryProjectStore
-from conversation_engine.storage.snapshot import (
-    ProjectSnapshot,
+from conversation_engine.storage.project_specification import (
+    ProjectSpecification,
     GoalSpec,
     RequirementSpec,
     CapabilitySpec,
@@ -69,8 +69,8 @@ def _req_cap_rule() -> IntegrityRule:
     )
 
 
-def _sample_snapshot() -> ProjectSnapshot:
-    return ProjectSnapshot(
+def _sample_snapshot() -> ProjectSpecification:
+    return ProjectSpecification(
         project_name="acme",
         goals=[
             GoalSpec(name="User Auth", statement="Users can log in"),
@@ -93,9 +93,9 @@ def _sample_snapshot() -> ProjectSnapshot:
     )
 
 
-def _snapshot_with_gaps() -> ProjectSnapshot:
+def _snapshot_with_gaps() -> ProjectSpecification:
     """A snapshot where Goal 'Orphan' has no requirements → violation."""
-    return ProjectSnapshot(
+    return ProjectSpecification(
         project_name="gaps",
         goals=[
             GoalSpec(name="Connected", statement="Has reqs"),
@@ -169,7 +169,7 @@ class TestSaveAndGet:
 
     def test_save_bad_ref_fails(self):
         svc = _make_service()
-        bad = ProjectSnapshot(
+        bad = ProjectSpecification(
             project_name="bad",
             requirements=[RequirementSpec(name="R", goal_ref="NoGoal")],
         )
@@ -194,7 +194,7 @@ class TestSaveAndGet:
 
     def test_save_empty_snapshot(self):
         svc = _make_service()
-        result = svc.save(ProjectSnapshot(project_name="empty"))
+        result = svc.save(ProjectSpecification(project_name="empty"))
         assert result.success is True
 
 
@@ -360,7 +360,7 @@ class TestFullLifecycle:
         assert len(orphan_findings) == 1
 
         # 3. Fix — save updated spec with requirement for orphan goal
-        fixed = ProjectSnapshot(
+        fixed = ProjectSpecification(
             project_name="gaps",
             goals=[
                 GoalSpec(name="Connected", statement="Has reqs"),

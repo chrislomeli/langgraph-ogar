@@ -24,8 +24,8 @@ from conversation_engine.models.nodes import (
 )
 from conversation_engine.storage.graph import KnowledgeGraph
 from conversation_engine.storage.project_store import InMemoryProjectStore
-from conversation_engine.storage.snapshot import (
-    ProjectSnapshot,
+from conversation_engine.storage.project_specification import (
+    ProjectSpecification,
     GoalSpec,
     RequirementSpec,
     CapabilitySpec,
@@ -33,7 +33,7 @@ from conversation_engine.storage.snapshot import (
     ConstraintSpec,
     DependencySpec,
 )
-from conversation_engine.storage.snapshot_facade import (
+from conversation_engine.storage.project_graph_facade import (
     snapshot_to_graph,
     graph_to_snapshot,
     SnapshotConversionError,
@@ -48,9 +48,9 @@ from conversation_engine.infrastructure.tool_client.project_graph_tools import (
 
 # ── Helpers ────────────────────────────────────────────────────────
 
-def _sample_snapshot() -> ProjectSnapshot:
+def _sample_snapshot() -> ProjectSpecification:
     """A realistic snapshot with all six entity types."""
-    return ProjectSnapshot(
+    return ProjectSpecification(
         project_name="acme",
         goals=[
             GoalSpec(name="User Authentication", statement="Users can log in securely"),
@@ -92,7 +92,7 @@ def _sample_snapshot() -> ProjectSnapshot:
 class TestProjectSnapshot:
 
     def test_minimal_snapshot(self):
-        snap = ProjectSnapshot(project_name="empty")
+        snap = ProjectSpecification(project_name="empty")
         assert snap.project_name == "empty"
         assert snap.goals == []
         assert snap.requirements == []
@@ -116,7 +116,7 @@ class TestProjectSnapshot:
     def test_snapshot_round_trip_json(self):
         snap = _sample_snapshot()
         json_str = snap.model_dump_json()
-        restored = ProjectSnapshot.model_validate_json(json_str)
+        restored = ProjectSpecification.model_validate_json(json_str)
         assert restored == snap
 
 
@@ -190,7 +190,7 @@ class TestSnapshotToGraph:
         assert node.statement == "Must comply with GDPR"
 
     def test_component_has_no_dependencies_flag(self):
-        snap = ProjectSnapshot(
+        snap = ProjectSpecification(
             project_name="test",
             components=[
                 ComponentSpec(name="Standalone", has_no_dependencies=True),
@@ -202,12 +202,12 @@ class TestSnapshotToGraph:
         assert node.has_no_dependencies is True
 
     def test_empty_snapshot_produces_empty_graph(self):
-        graph = snapshot_to_graph(ProjectSnapshot(project_name="empty"))
+        graph = snapshot_to_graph(ProjectSpecification(project_name="empty"))
         assert graph.node_count() == 0
         assert graph.edge_count() == 0
 
     def test_bad_goal_ref_raises(self):
-        snap = ProjectSnapshot(
+        snap = ProjectSpecification(
             project_name="test",
             requirements=[
                 RequirementSpec(name="R1", goal_ref="NonexistentGoal"),
@@ -217,7 +217,7 @@ class TestSnapshotToGraph:
             snapshot_to_graph(snap)
 
     def test_bad_requirement_ref_raises(self):
-        snap = ProjectSnapshot(
+        snap = ProjectSpecification(
             project_name="test",
             goals=[GoalSpec(name="G1", statement="g")],
             capabilities=[
@@ -228,7 +228,7 @@ class TestSnapshotToGraph:
             snapshot_to_graph(snap)
 
     def test_bad_capability_ref_raises(self):
-        snap = ProjectSnapshot(
+        snap = ProjectSpecification(
             project_name="test",
             components=[
                 ComponentSpec(name="X", capability_refs=["Nonexistent"]),
@@ -238,7 +238,7 @@ class TestSnapshotToGraph:
             snapshot_to_graph(snap)
 
     def test_bad_dependency_ref_raises(self):
-        snap = ProjectSnapshot(
+        snap = ProjectSpecification(
             project_name="test",
             components=[
                 ComponentSpec(name="X", dependency_refs=["Nonexistent"]),
@@ -248,7 +248,7 @@ class TestSnapshotToGraph:
             snapshot_to_graph(snap)
 
     def test_multiple_requirements_per_goal(self):
-        snap = ProjectSnapshot(
+        snap = ProjectSpecification(
             project_name="test",
             goals=[GoalSpec(name="G", statement="g")],
             requirements=[
@@ -261,7 +261,7 @@ class TestSnapshotToGraph:
         assert len(edges) == 2
 
     def test_capability_with_multiple_requirement_refs(self):
-        snap = ProjectSnapshot(
+        snap = ProjectSpecification(
             project_name="test",
             goals=[GoalSpec(name="G", statement="g")],
             requirements=[
@@ -349,7 +349,7 @@ class TestRoundTrip:
         assert restored.components[0].dependency_refs == ["Redis"]
 
     def test_empty_round_trip(self):
-        original = ProjectSnapshot(project_name="empty")
+        original = ProjectSpecification(project_name="empty")
         graph = snapshot_to_graph(original)
         restored = graph_to_snapshot("empty", graph)
         assert restored.goals == []
@@ -398,7 +398,7 @@ class TestKnowledgeGraphTool:
 
     def test_create_bad_ref_fails(self):
         spec, _ = self._make_tool()
-        bad_snap = ProjectSnapshot(
+        bad_snap = ProjectSpecification(
             project_name="bad",
             requirements=[RequirementSpec(name="R", goal_ref="NoGoal")],
         )

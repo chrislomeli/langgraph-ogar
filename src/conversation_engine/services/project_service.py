@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Literal, Optional, Protocol, runtime_checkab
 
 from conversation_engine.graph.context import Finding, ValidationResult
 from conversation_engine.models.validation_quiz import ValidationQuiz
-from conversation_engine.storage.snapshot import ProjectSnapshot
+from conversation_engine.storage.project_specification import ProjectSpecification
 
 
 Severity = Literal["low", "medium", "high"]
@@ -37,7 +37,7 @@ class ProjectServiceResult:
     """
     success: bool
     message: str = ""
-    snapshot: Optional[ProjectSnapshot] = None
+    snapshot: Optional[ProjectSpecification] = None
     findings: List[Finding] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -60,7 +60,7 @@ class ProjectService(Protocol):
         """
         ...
 
-    def save(self, spec: ProjectSnapshot) -> ProjectServiceResult:
+    def save(self, spec: ProjectSpecification) -> ProjectServiceResult:
         """
         Persist a project from a ProjectSnapshot.
 

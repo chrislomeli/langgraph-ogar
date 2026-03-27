@@ -20,7 +20,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from conversation_engine.infrastructure.tool_client.spec import ToolSpec
-from conversation_engine.storage.snapshot import ProjectSnapshot
+from conversation_engine.storage.project_specification import ProjectSpecification
 
 
 # ── I/O models ─────────────────────────────────────────────────────
@@ -50,7 +50,7 @@ class ProjectGraphInput(BaseModel):
             "For CREATE, the project name is taken from the payload."
         ),
     )
-    payload: Optional[ProjectSnapshot] = Field(
+    payload: Optional[ProjectSpecification] = Field(
         None,
         description=(
             "The project data — required for CREATE. "
@@ -63,7 +63,7 @@ class ProjectGraphOutput(BaseModel):
     """Output from the knowledge_graph tool."""
     success: bool = Field(..., description="Whether the operation succeeded")
     message: str = Field(default="", description="Human-readable status message")
-    payload: Optional[ProjectSnapshot] = Field(
+    payload: Optional[ProjectSpecification] = Field(
         None,
         description="The project data — returned by READ and CREATE, None for DELETE.",
     )

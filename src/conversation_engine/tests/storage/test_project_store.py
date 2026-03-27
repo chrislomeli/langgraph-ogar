@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 
 from conversation_engine.models.domain_config import DomainConfig
+from conversation_engine.storage import ProjectSpecification, GoalSpec, RequirementSpec, CapabilitySpec, ComponentSpec, DependencySpec, ConstraintSpec
 from conversation_engine.storage.project_store import (
     InMemoryProjectStore,
     ProjectStore,
@@ -39,6 +40,43 @@ def _sample_graph() -> KnowledgeGraph:
     g.add_edge(BaseEdge(edge_type="SATISFIED_BY", source_id="g1", target_id="r1"))
     return g
 
+def _sample_specification() -> ProjectSpecification:
+    """A realistic snapshot with all six entity types."""
+    return ProjectSpecification(
+        project_name="acme",
+        goals=[
+            GoalSpec(name="User Authentication", statement="Users can log in securely"),
+        ],
+        requirements=[
+            RequirementSpec(
+                name="OAuth Support",
+                goal_ref="User Authentication",
+                requirement_type="functional",
+                description="Support OAuth 2.0 providers",
+            ),
+        ],
+        capabilities=[
+            CapabilitySpec(
+                name="SSO Login",
+                requirement_refs=["OAuth Support"],
+                description="Single sign-on via OAuth",
+            ),
+        ],
+        components=[
+            ComponentSpec(
+                name="Auth Service",
+                capability_refs=["SSO Login"],
+                dependency_refs=["Redis"],
+                description="Handles authentication flows",
+            ),
+        ],
+        constraints=[
+            ConstraintSpec(name="GDPR", statement="Must comply with GDPR"),
+        ],
+        dependencies=[
+            DependencySpec(name="Redis", description="Session cache"),
+        ],
+    )
 
 def _sample_rules() -> list[IntegrityRule]:
     return [
@@ -72,6 +110,7 @@ def _full_config(**overrides) -> DomainConfig:
     defaults = dict(
         project_name="test-project",
         knowledge_graph=_sample_graph(),
+        project_specification=_sample_specification(),
         rules=_sample_rules(),
         quiz=_sample_quiz(),
         query_patterns=[],

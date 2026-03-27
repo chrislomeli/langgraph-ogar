@@ -15,8 +15,8 @@ from conversation_engine.storage.project_store import (
     InMemoryProjectStore,
 )
 from conversation_engine.storage.file_project_store import FileProjectStore
-from conversation_engine.storage.snapshot import (
-    ProjectSnapshot,
+from conversation_engine.storage.project_specification import (
+    ProjectSpecification,
     GoalSpec,
     RequirementSpec,
     CapabilitySpec,
@@ -24,7 +24,7 @@ from conversation_engine.storage.snapshot import (
     ConstraintSpec,
     DependencySpec,
 )
-from conversation_engine.storage.snapshot_facade import (
+from conversation_engine.storage.project_graph_facade import (
     snapshot_to_graph,
     graph_to_snapshot,
     SnapshotConversionError,
@@ -37,7 +37,7 @@ __all__ = [
     "InMemoryProjectStore",
     "FileProjectStore",
     # Snapshot
-    "ProjectSnapshot",
+    "ProjectSpecification",
     "GoalSpec",
     "RequirementSpec",
     "CapabilitySpec",
