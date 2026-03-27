@@ -27,6 +27,7 @@ from conversation_engine.infrastructure.llm import CallLLM
 from conversation_engine.infrastructure.human import CallHuman
 from conversation_engine.infrastructure.tool_client import ToolClient
 from conversation_engine.storage.project_store import ProjectStore
+from conversation_engine.services.project_service import ProjectService
 
 
 # ── Subgraph contract ────────────────────────────────────────────────
@@ -48,12 +49,17 @@ class ConversationOutput(TypedDict):
 # ── Internal working state ───────────────────────────────────────────
 
 class ConversationState(TypedDict):
-    # Injected domain context — set by resolve_domain, read by all downstream nodes
+    # Injected domain context — LEGACY, kept for backwards compatibility
     context: Optional[ConversationContext]
     session_id: str
 
-    # Domain resolution inputs — resolve_domain uses these to build context
+    # The single gateway for all project operations (replaces context + project_store)
+    project_service: Optional[ProjectService]
+
+    # Project name — used by resolve_domain and service calls
     project_name: Optional[str]
+
+    # LEGACY — kept for backwards compatibility during migration
     project_store: Optional[ProjectStore]
 
     # Injected LLM callable — optional, nodes fall back to stub if absent

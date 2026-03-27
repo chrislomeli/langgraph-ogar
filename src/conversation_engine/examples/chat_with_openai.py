@@ -27,9 +27,8 @@ import sys
 from pathlib import Path
 
 from conversation_engine.graph import ConversationState
-from conversation_engine.infrastructure.llm.architectural_quiz import ARCHITECTURAL_QUIZ
 from conversation_engine.models import Goal, Requirement, BaseEdge
-from conversation_engine.storage import KnowledgeGraph
+from conversation_engine.storage import KnowledgeGraph, InMemoryProjectStore
 
 # ── Setup path ────────────────────────────────────────────────────────
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -41,15 +40,18 @@ if _env_file.exists():
         line = line.strip()
         if line and not line.startswith("#") and "=" in line:
             key, _, value = line.partition("=")
-            key, value = key.strip(), value.strip().strip("'\"")
+            key, value = key.strip(), value.strip("'\"")
             if key and key not in os.environ:
                 os.environ[key] = value
 
 from conversation_engine.graph.builder import build_conversation_graph
-from conversation_engine.graph.architectural_context import ArchitecturalOntologyContext
-from conversation_engine.models.domain_config import DomainConfig
 from conversation_engine.models.rules import IntegrityRule
-from ogar.fixtures import create_graph_with_gaps, create_graph_complete
+from conversation_engine.services.architectural_project_service import ArchitecturalProjectService
+from conversation_engine.storage.snapshot import (
+    ProjectSnapshot,
+    GoalSpec,
+    RequirementSpec,
+)
 from conversation_engine.infrastructure.llm import make_openai_llm
 from conversation_engine.infrastructure.human import ConsoleHuman
 from conversation_engine.infrastructure.tool_client import (
@@ -58,122 +60,94 @@ from conversation_engine.infrastructure.tool_client import (
     make_ask_human_tool,
     make_revalidate_tool,
     make_mark_complete_tool,
+    make_project_service_tool,
 )
 from conversation_engine.infrastructure.middleware import (
     MetricsMiddleware,
 )
 
-def _sample_config() -> DomainConfig:
-    g = KnowledgeGraph()
-    g.add_node(Goal(id="g1", name="Goal 1", statement="A goal"))
-    g.add_node(Requirement(id="r1", name="Req 1"))
-    g.add_edge(BaseEdge(edge_type="SATISFIED_BY", source_id="g1", target_id="r1"))
-    return DomainConfig(
-        project_name="test-project",
-        knowledge_graph=g,
-        quiz=list(ARCHITECTURAL_QUIZ),
-        rules=[
-            IntegrityRule(
-                id="rule-goal-req",
-                name="Goal → Requirement",
-                description="Every goal must have at least one requirement",
-                applies_to_node_type="goal",
-                rule_type="minimum_outgoing_edge_count",
-                edge_type="SATISFIED_BY",
-                target_node_types=["requirement"],
-                minimum_count=1,
-                severity="high",
-                failure_message_template="Goal '{subject_name}' has no requirements.",
-            ),
-            IntegrityRule(
-                id="rule-req-cap",
-                name="Requirement → Capability",
-                description="Every requirement must have at least one capability",
-                applies_to_node_type="requirement",
-                rule_type="minimum_outgoing_edge_count",
-                edge_type="REALIZED_BY",
-                target_node_types=["capability"],
-                minimum_count=1,
-                severity="medium",
-                failure_message_template="Requirement '{subject_name}' has no capabilities.",
+PROJECT_NAME = "architectural-chat"
+
+STANDARD_RULES = [
+    IntegrityRule(
+        id="rule-goal-req",
+        name="Goal → Requirement",
+        description="Every goal must have at least one requirement",
+        applies_to_node_type="goal",
+        rule_type="minimum_outgoing_edge_count",
+        edge_type="SATISFIED_BY",
+        target_node_types=["requirement"],
+        minimum_count=1,
+        severity="high",
+        failure_message_template="Goal '{subject_name}' has no requirements.",
+    ),
+    IntegrityRule(
+        id="rule-req-cap",
+        name="Requirement → Capability",
+        description="Every requirement must have at least one capability",
+        applies_to_node_type="requirement",
+        rule_type="minimum_outgoing_edge_count",
+        edge_type="REALIZED_BY",
+        target_node_types=["capability"],
+        minimum_count=1,
+        severity="medium",
+        failure_message_template="Requirement '{subject_name}' has no capabilities.",
+    ),
+]
+
+
+def build_service() -> ArchitecturalProjectService:
+    """
+    Build the ProjectService and seed it with a sample project.
+
+    The service is the single gateway for all project operations.
+    Both the LLM (via tools) and the conversation nodes use it.
+    """
+    store = InMemoryProjectStore()
+    svc = ArchitecturalProjectService(
+        store=store,
+        rules=STANDARD_RULES,
+    )
+    # Seed with a sample project
+    snapshot = ProjectSnapshot(
+        project_name=PROJECT_NAME,
+        goals=[
+            GoalSpec(name="User Authentication", statement="Users can log in securely"),
+            GoalSpec(name="Data Export", statement="Users can export their data"),
+        ],
+        requirements=[
+            RequirementSpec(
+                name="OAuth Support",
+                goal_ref="User Authentication",
+                requirement_type="functional",
             ),
         ],
-        system_prompt="Test system prompt.",
     )
-
-def _minimal_state(**overrides) -> ConversationState:
-    """Build a minimal ConversationState dict with sensible defaults."""
-    state: ConversationState = {
-        "context": None,
-        "session_id": "test-session",
-        "project_name": None,
-        "project_store": None,
-        "llm": None,
-        "human": None,
-        "tool_client": None,
-        "findings": [],
-        "messages": [],
-        "current_turn": 0,
-        "status": "running",
-        "node_result": None,
-        "preflight_passed": False,
-    }
-    state.update(overrides)
-    return state
+    svc.save(snapshot)
+    return svc
 
 
-
-def build_context() -> ArchitecturalOntologyContext:
-    """Create an architectural context with a graph that has integrity gaps."""
-    graph = create_graph_complete()
-    rules = [
-        IntegrityRule(
-            id="rule-goal-req",
-            name="Goal → Requirement",
-            description="Every goal must have at least one requirement",
-            applies_to_node_type="goal",
-            rule_type="minimum_outgoing_edge_count",
-            edge_type="SATISFIED_BY",
-            target_node_types=["requirement"],
-            minimum_count=1,
-            severity="high",
-            failure_message_template="Goal '{subject_name}' has no requirements.",
-        ),
-        IntegrityRule(
-            id="rule-req-cap",
-            name="Requirement → Capability",
-            description="Every requirement must have at least one capability",
-            applies_to_node_type="requirement",
-            rule_type="minimum_outgoing_edge_count",
-            edge_type="REALIZED_BY",
-            target_node_types=["capability"],
-            minimum_count=1,
-            severity="medium",
-            failure_message_template="Requirement '{subject_name}' has no capabilities.",
-        ),
-    ]
-    config = DomainConfig(project_name="architectural-chat", knowledge_graph=graph, rules=rules)
-    return ArchitecturalOntologyContext(config)
-
-
-def build_tool_client(human, ctx, findings_ref):
+def build_tool_client(human, service, findings_ref):
     """
-    Build a LocalToolClient with conversation tools registered.
+    Build a LocalToolClient with conversation + project tools registered.
 
     Parameters
     ----------
     human : CallHuman
         The human surface implementation.
-    ctx : ConversationContext
-        The domain context for revalidation.
+    service : ArchitecturalProjectService
+        The single gateway for all project operations.
     findings_ref : list
         Mutable list used as a closure reference so the revalidate tool
         can access the latest findings.
     """
     registry = ToolRegistry()
     registry.register(make_ask_human_tool(human))
-    registry.register(make_revalidate_tool(ctx, lambda: findings_ref[0]))
+    registry.register(make_revalidate_tool(
+        service, lambda: findings_ref[0], project_name=PROJECT_NAME,
+    ))
     registry.register(make_mark_complete_tool())
+    registry.register(make_project_service_tool(service))
     return LocalToolClient(registry)
 
 
@@ -190,10 +164,11 @@ def main():
     print("=" * 60)
 
     # ── Build components ──────────────────────────────────────────
-    ctx = build_context()
-    print(f"\n  Graph: {ctx.graph.node_count()} nodes, {ctx.graph.edge_count()} edges")
+    service = build_service()
+    initial = service.validate(PROJECT_NAME)
+    print(f"\n  Project: {PROJECT_NAME}")
+    print(f"  Initial findings: {len(initial.findings)}")
 
-    # open wrapper class with llm
     model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
     try:
         llm = make_openai_llm(model=model)
@@ -207,7 +182,7 @@ def main():
     # findings_ref is a mutable container so the revalidate tool closure
     # can access the latest findings from state
     findings_ref = [[]]
-    tool_client = build_tool_client(human, ctx, findings_ref)
+    tool_client = build_tool_client(human, service, findings_ref)
 
     print(f"  Tools: {', '.join(t['name'] for t in tool_client.list_tools())}")
 
@@ -216,7 +191,10 @@ def main():
 
     # ── Initial state ─────────────────────────────────────────────
     state = {
-        "context": ctx,
+        "context": None,
+        "project_service": service,
+        "project_name": PROJECT_NAME,
+        "project_store": None,
         "session_id": "chat-session",
         "llm": llm,
         "human": None,          # human interaction now goes through ask_human tool

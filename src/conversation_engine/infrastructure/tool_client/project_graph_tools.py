@@ -1,42 +1,35 @@
 """
-Knowledge-graph tool — business-level CRD operations for the ReAct agent.
+Knowledge-graph tool — business-level CRUD operations for the ReAct agent.
 
 The LLM interacts with ``ProjectSnapshot`` (flat, name-based references).
-It never sees nodes, edges, or IDs.  The tool handler converts snapshots
-to/from the internal ``KnowledgeGraph`` via the snapshot facade, and
-persists them through the ``ProjectStore``.
+It never sees nodes, edges, or IDs.  The tool handler delegates all
+operations to a ``ProjectService``.
 
 Methods:
     CREATE(payload)  — persist a new project from a ProjectSnapshot
     READ(key)        — retrieve an existing project as a ProjectSnapshot
+    UPDATE(key, payload) — replace an existing project
     DELETE(key)      — remove a project by name
-
-Update semantics: DELETE + CREATE (safe MVP approach).
+    VALIDATE(key)    — run integrity checks and return findings
 """
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal, Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
 from conversation_engine.infrastructure.tool_client.spec import ToolSpec
-from conversation_engine.storage import ProjectStore
 from conversation_engine.storage.snapshot import ProjectSnapshot
-from conversation_engine.models.domain_config import DomainConfig
-from conversation_engine.storage.snapshot_facade import (
-    snapshot_to_graph,
-    graph_to_snapshot,
-    SnapshotConversionError,
-)
 
 
 # ── I/O models ─────────────────────────────────────────────────────
 class CRUDMethod(str, Enum):
-    CREATE = "CREATE"
-    READ   = "READ"
-    UPDATE = "UPDATE"
-    DELETE = "DELETE"
+    CREATE   = "CREATE"
+    READ     = "READ"
+    UPDATE   = "UPDATE"
+    DELETE   = "DELETE"
+    VALIDATE = "VALIDATE"
 
 
 class ProjectGraphInput(BaseModel):
@@ -72,130 +65,45 @@ class ProjectGraphOutput(BaseModel):
     message: str = Field(default="", description="Human-readable status message")
     payload: Optional[ProjectSnapshot] = Field(
         None,
-        description="The project data — returned by READ, None for CREATE and DELETE.",
+        description="The project data — returned by READ and CREATE, None for DELETE.",
+    )
+    findings: Optional[List[str]] = Field(
+        None,
+        description="Validation findings — returned by VALIDATE and CREATE/UPDATE.",
     )
 
 
-# ── CRUD operations ───────────────────────────────────────────────────
+# ── Service-backed tool factory ─────────────────────────────────────
 
-def _create_project(
-    project_store: ProjectStore,
-    snapshot: ProjectSnapshot,
-) -> ProjectGraphOutput:
-    """Create a new project from a snapshot."""
-    if project_store.exists(snapshot.project_name):
-        return ProjectGraphOutput(
-            success=False,
-            message=f"Project '{snapshot.project_name}' already exists. "
-                    "DELETE it first, then CREATE again.",
-        )
-    try:
-        graph = snapshot_to_graph(snapshot)
-    except SnapshotConversionError as e:
-        return ProjectGraphOutput(
-            success=False,
-            message=f"Invalid snapshot: {e}",
-        )
-    config = DomainConfig(
-        project_name=snapshot.project_name,
-        knowledge_graph=graph,
-    )
-    project_store.save(config)
-    return ProjectGraphOutput(
-        success=True,
-        message=f"Project '{snapshot.project_name}' created "
-                f"({graph.node_count()} nodes, {graph.edge_count()} edges).",
-    )
-
-def _update_project(
-    project_store: ProjectStore,
-    key: str,
-    snapshot: ProjectSnapshot,
-) -> ProjectGraphOutput:
-    delete_result: ProjectGraphOutput = _delete_project(project_store, key)
-    if not delete_result.success:
-        return delete_result
-
-    return _create_project(project_store, snapshot)
-
-
-def _read_project(
-    project_store: ProjectStore,
-    key: str,
-) -> ProjectGraphOutput:
-    """Read an existing project as a snapshot."""
-    config = project_store.load(key)
-    if config is None:
-        return ProjectGraphOutput(
-            success=False,
-            message=f"Project '{key}' not found.",
-        )
-    if config.knowledge_graph is None:
-        return ProjectGraphOutput(
-            success=True,
-            message=f"Project '{key}' exists but has no knowledge graph.",
-            payload=ProjectSnapshot(project_name=key),
-        )
-    snapshot = graph_to_snapshot(key, config.knowledge_graph)
-    return ProjectGraphOutput(
-        success=True,
-        message=f"Project '{key}' loaded.",
-        payload=snapshot,
-    )
-
-
-def _delete_project(
-    project_store: ProjectStore,
-    key: str,
-) -> ProjectGraphOutput:
-    """Delete a project by name."""
-    removed = project_store.delete(key)
-    if removed:
-        return ProjectGraphOutput(
-            success=True,
-            message=f"Project '{key}' deleted.",
-        )
-    return ProjectGraphOutput(
-        success=False,
-        message=f"Project '{key}' not found.",
-    )
-
-
-# ── Tool factory ───────────────────────────────────────────────────
-
-def make_project_graph_tool(project_store: ProjectStore) -> ToolSpec:
+def make_project_service_tool(service) -> ToolSpec:
     """
-    Create a knowledge_graph ToolSpec bound to a ProjectStore.
+    Create a knowledge_graph ToolSpec backed by a ProjectService.
+
+    This is the primary factory.  The service owns all domain logic
+    (validation, conversion, persistence).  The tool is a thin wrapper.
 
     Parameters
     ----------
-    project_store : ProjectStore
-        The persistence layer to use (InMemoryProjectStore,
-        FileProjectStore, future MemgraphProjectStore, etc.)
+    service : ProjectService
+        The single gateway for all project operations.
     """
 
     def handler(input_: ProjectGraphInput) -> ProjectGraphOutput:
         match input_.method:
-            case CRUDMethod.CREATE:
+            case CRUDMethod.CREATE | CRUDMethod.UPDATE:
                 if input_.payload is None:
                     return ProjectGraphOutput(
                         success=False,
-                        message="CREATE requires a payload (ProjectSnapshot).",
+                        message=f"{input_.method.value} requires a payload (ProjectSnapshot).",
                     )
-                return _create_project(project_store, input_.payload)
-
-            case CRUDMethod.UPDATE:
-                if not input_.key:
-                    return ProjectGraphOutput(
-                        success=False,
-                        message="UPDATE requires a key (project name).",
-                    )
-                if input_.payload is None:
-                    return ProjectGraphOutput(
-                        success=False,
-                        message="UPDATE requires a payload (ProjectSnapshot).",
-                    )
-                return _update_project(project_store, input_.key, input_.payload)
+                result = service.save(input_.payload)
+                finding_msgs = [f.message for f in result.findings] if result.findings else None
+                return ProjectGraphOutput(
+                    success=result.success,
+                    message=result.message,
+                    payload=result.snapshot,
+                    findings=finding_msgs,
+                )
 
             case CRUDMethod.READ:
                 if not input_.key:
@@ -203,7 +111,12 @@ def make_project_graph_tool(project_store: ProjectStore) -> ToolSpec:
                         success=False,
                         message="READ requires a key (project name).",
                     )
-                return _read_project(project_store, input_.key)
+                result = service.get(input_.key)
+                return ProjectGraphOutput(
+                    success=result.success,
+                    message=result.message,
+                    payload=result.snapshot,
+                )
 
             case CRUDMethod.DELETE:
                 if not input_.key:
@@ -211,16 +124,32 @@ def make_project_graph_tool(project_store: ProjectStore) -> ToolSpec:
                         success=False,
                         message="DELETE requires a key (project name).",
                     )
-                return _delete_project(project_store, input_.key)
+                result = service.delete(input_.key)
+                return ProjectGraphOutput(
+                    success=result.success,
+                    message=result.message,
+                )
+
+            case CRUDMethod.VALIDATE:
+                if not input_.key:
+                    return ProjectGraphOutput(
+                        success=False,
+                        message="VALIDATE requires a key (project name).",
+                    )
+                result = service.validate(input_.key)
+                finding_msgs = [f.message for f in result.findings] if result.findings else None
+                return ProjectGraphOutput(
+                    success=result.success,
+                    message=result.message,
+                    findings=finding_msgs,
+                )
 
             case _:
                 return ProjectGraphOutput(
                     success=False,
-                    message=f"Unknown method '{input_.method}'. Use CREATE, READ, or DELETE.",
+                    message=f"Unknown method '{input_.method}'. "
+                            "Use CREATE, READ, UPDATE, DELETE, or VALIDATE.",
                 )
-
-
-
 
     return ToolSpec(
         name="knowledge_graph",
@@ -228,10 +157,11 @@ def make_project_graph_tool(project_store: ProjectStore) -> ToolSpec:
             "Perform business-level operations on a project's knowledge graph. "
             "This is the sole interface for persisting and retrieving project data.\n\n"
             "Methods:\n"
-            "  CREATE(payload) — persist a new project from a ProjectSnapshot\n"
-            "  READ(key)       — retrieve an existing project as a ProjectSnapshot\n"
-            "  DELETE(key)     — remove a project by name\n\n"
-            "To update a project, DELETE it first then CREATE with the new data.\n\n"
+            "  CREATE(payload)  — persist a new project from a ProjectSnapshot\n"
+            "  READ(key)        — retrieve an existing project as a ProjectSnapshot\n"
+            "  UPDATE(payload)  — replace an existing project (upsert)\n"
+            "  DELETE(key)      — remove a project by name\n"
+            "  VALIDATE(key)    — run integrity checks and return findings\n\n"
             "The payload is a ProjectSnapshot with goals, requirements, capabilities, "
             "components, constraints, and dependencies. Use name-based references "
             "(e.g. a requirement's goal_ref is the goal's name, not an ID)."
@@ -240,3 +170,19 @@ def make_project_graph_tool(project_store: ProjectStore) -> ToolSpec:
         output_model=ProjectGraphOutput,
         handler=handler,
     )
+
+
+# ── Legacy tool factory (backwards compatibility) ────────────────────
+
+def make_project_graph_tool(project_store) -> ToolSpec:
+    """
+    LEGACY: Create a knowledge_graph ToolSpec bound to a ProjectStore.
+
+    Prefer ``make_project_service_tool(service)`` for new code.
+    This factory builds an ArchitecturalProjectService internally.
+    """
+    from conversation_engine.services.architectural_project_service import (
+        ArchitecturalProjectService,
+    )
+    service = ArchitecturalProjectService(store=project_store)
+    return make_project_service_tool(service)

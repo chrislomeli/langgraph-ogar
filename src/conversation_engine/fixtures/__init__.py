@@ -18,8 +18,10 @@ from conversation_engine.fixtures.config_fixtures import (
     sample_config,
     partial_config,
     make_context,
+    make_service,
     minimal_state,
     make_state,
+    make_service_state,
 )
 
 __all__ = [
@@ -36,6 +38,8 @@ __all__ = [
     "sample_config",
     "partial_config",
     "make_context",
+    "make_service",
     "minimal_state",
     "make_state",
+    "make_service_state",
 ]

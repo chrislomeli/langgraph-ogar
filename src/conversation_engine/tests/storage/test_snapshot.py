@@ -377,7 +377,7 @@ class TestKnowledgeGraphTool:
         inp = ProjectGraphInput(method="CREATE", payload=_sample_snapshot())
         out = spec.handler(inp)
         assert out.success is True
-        assert "created" in out.message.lower()
+        assert "saved" in out.message.lower()
         assert store.exists("acme")
 
     def test_create_no_payload(self):
@@ -387,13 +387,14 @@ class TestKnowledgeGraphTool:
         assert out.success is False
         assert "payload" in out.message.lower()
 
-    def test_create_duplicate_fails(self):
+    def test_create_duplicate_is_upsert(self):
+        """Service does upsert — duplicate CREATE succeeds."""
         spec, _ = self._make_tool()
         inp = ProjectGraphInput(method="CREATE", payload=_sample_snapshot())
         spec.handler(inp)
         out = spec.handler(inp)
-        assert out.success is False
-        assert "already exists" in out.message.lower()
+        assert out.success is True
+        assert "saved" in out.message.lower()
 
     def test_create_bad_ref_fails(self):
         spec, _ = self._make_tool()
@@ -404,7 +405,7 @@ class TestKnowledgeGraphTool:
         inp = ProjectGraphInput(method="CREATE", payload=bad_snap)
         out = spec.handler(inp)
         assert out.success is False
-        assert "invalid snapshot" in out.message.lower()
+        assert "invalid spec" in out.message.lower()
 
     def test_read_success(self):
         spec, _ = self._make_tool()

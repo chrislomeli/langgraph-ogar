@@ -16,7 +16,10 @@ from conversation_engine.graph.state import ConversationState
 from conversation_engine.infrastructure.llm.architectural_quiz import ARCHITECTURAL_QUIZ
 from conversation_engine.models.domain_config import DomainConfig
 from conversation_engine.models.rules import IntegrityRule
+from conversation_engine.services.architectural_project_service import ArchitecturalProjectService
 from conversation_engine.storage.graph import KnowledgeGraph
+from conversation_engine.storage.project_store import InMemoryProjectStore
+from conversation_engine.storage.snapshot_facade import graph_to_snapshot
 
 
 # ── Rule factories ───────────────────────────────────────────────────
@@ -130,6 +133,24 @@ def make_context(
     return ArchitecturalOntologyContext(config)
 
 
+# ── Service factories ────────────────────────────────────────────────
+
+def make_service(
+    graph: KnowledgeGraph,
+    rules: Optional[List[IntegrityRule]] = None,
+    project_name: str = "test",
+) -> ArchitecturalProjectService:
+    """Build an ArchitecturalProjectService with a graph pre-loaded into the store."""
+    store = InMemoryProjectStore()
+    svc = ArchitecturalProjectService(
+        store=store,
+        rules=rules or [goal_req_rule()],
+    )
+    snapshot = graph_to_snapshot(project_name, graph)
+    svc.save(snapshot)
+    return svc
+
+
 # ── State factories ──────────────────────────────────────────────────
 
 def minimal_state(**overrides) -> ConversationState:
@@ -137,6 +158,7 @@ def minimal_state(**overrides) -> ConversationState:
     state: ConversationState = {
         "context": None,
         "session_id": "test-session",
+        "project_service": None,
         "project_name": None,
         "project_store": None,
         "llm": None,
@@ -160,4 +182,17 @@ def make_state(
     """Build a ConversationState with an ArchitecturalOntologyContext already set."""
     return minimal_state(
         context=make_context(graph, rules),
+    )
+
+
+def make_service_state(
+    graph: KnowledgeGraph,
+    rules: Optional[List[IntegrityRule]] = None,
+    project_name: str = "test",
+) -> ConversationState:
+    """Build a ConversationState with a ProjectService already set."""
+    svc = make_service(graph, rules, project_name)
+    return minimal_state(
+        project_service=svc,
+        project_name=project_name,
     )

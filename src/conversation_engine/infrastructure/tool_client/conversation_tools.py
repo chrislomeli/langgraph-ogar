@@ -91,24 +91,36 @@ class RevalidateOutput(BaseModel):
     summary: str = Field(description="Brief summary of the validation result.")
 
 
-def make_revalidate_tool(context, get_findings: Callable) -> ToolSpec:
+def make_revalidate_tool(context_or_service, get_findings: Callable, project_name: Optional[str] = None) -> ToolSpec:
     """
-    Create a revalidate ToolSpec bound to a ConversationContext.
+    Create a revalidate ToolSpec bound to a ProjectService or ConversationContext.
 
     Parameters
     ----------
-    context : ConversationContext
-        The domain context to validate against.
+    context_or_service : ProjectService or ConversationContext
+        The service (preferred) or legacy context to validate against.
     get_findings : callable
         Returns the current findings list (closure over state).
+    project_name : str, optional
+        Required when using a ProjectService.
     """
 
     def handler(input_: RevalidateInput) -> RevalidateOutput:
         prior = get_findings()
-        result = context.validate(prior)
-        open_f = [f for f in result.findings if not f.resolved]
-        resolved_f = [f for f in result.findings if f.resolved]
-        summary = context.format_finding_summary(open_f)
+
+        # ProjectService path (preferred)
+        if hasattr(context_or_service, 'validate_findings') and project_name:
+            result = context_or_service.validate_findings(project_name, prior)
+            open_f = [f for f in result.findings if not f.resolved]
+            resolved_f = [f for f in result.findings if f.resolved]
+            summary = context_or_service.format_finding_summary(open_f)
+        else:
+            # Legacy ConversationContext path
+            result = context_or_service.validate(prior)
+            open_f = [f for f in result.findings if not f.resolved]
+            resolved_f = [f for f in result.findings if f.resolved]
+            summary = context_or_service.format_finding_summary(open_f)
+
         return RevalidateOutput(
             total_findings=len(result.findings),
             open_findings=len(open_f),

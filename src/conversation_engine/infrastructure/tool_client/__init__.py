@@ -34,6 +34,7 @@ from conversation_engine.infrastructure.tool_client.project_graph_tools import (
     ProjectGraphInput,
     ProjectGraphOutput,
     make_project_graph_tool,
+    make_project_service_tool,
 )
 from conversation_engine.infrastructure.tool_client.langchain_bridge import (
     specs_to_langchain_tools,
@@ -63,6 +64,7 @@ __all__ = [
     "ProjectGraphInput",
     "ProjectGraphOutput",
     "make_project_graph_tool",
+    "make_project_service_tool",
     # LangChain bridge
     "specs_to_langchain_tools",
     "execute_tool_call",

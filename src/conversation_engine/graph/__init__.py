@@ -30,6 +30,10 @@ from conversation_engine.graph.architectural_context import (
     ArchitecturalOntologyContext,
 )
 from conversation_engine.models.domain_config import DomainConfig
+from conversation_engine.services.project_service import ProjectService
+from conversation_engine.services.architectural_project_service import (
+    ArchitecturalProjectService,
+)
 
 __all__ = [
     "ConversationContext",
@@ -41,4 +45,6 @@ __all__ = [
     "build_conversation_graph",
     "ArchitecturalOntologyContext",
     "DomainConfig",
+    "ProjectService",
+    "ArchitecturalProjectService",
 ]

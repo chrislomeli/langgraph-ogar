@@ -22,6 +22,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 
 from conversation_engine.graph.context import ConversationContext, Finding
 from conversation_engine.graph.state import ConversationState
+from conversation_engine.services.project_service import ProjectService
 from conversation_engine.infrastructure.llm import (
     CallLLM,
     LLMRequest,
@@ -50,7 +51,8 @@ def preflight(state: ConversationState) -> Dict[str, Any]:
     """
     Run pre-flight LLM validation on the first turn only.
 
-    Pulls the quiz and system prompt from the ConversationContext.
+    Pulls the quiz and system prompt from ProjectService (preferred)
+    or ConversationContext (legacy fallback).
     If no LLM or no quiz is configured, passes through immediately.
     On failure, sets status='error' so the router exits the graph.
     On success (or skip), sets preflight_passed=True so subsequent
@@ -60,9 +62,19 @@ def preflight(state: ConversationState) -> Dict[str, Any]:
     if state.get("preflight_passed", False):
         return {}
 
-    ctx: ConversationContext = state["context"]
+    # Resolve quiz + system_prompt from service or context
+    svc: Optional[ProjectService] = state.get("project_service")
+    ctx: Optional[ConversationContext] = state.get("context")
     llm: Optional[CallLLM] = state.get("llm")
-    quiz = ctx.preflight_quiz
+
+    if svc:
+        quiz = svc.preflight_quiz
+        sys_prompt = svc.system_prompt
+    elif ctx:
+        quiz = ctx.preflight_quiz
+        sys_prompt = ctx.system_prompt
+    else:
+        return {"preflight_passed": True}
 
     # Skip if no LLM or no quiz configured
     if not llm or not quiz:
@@ -71,7 +83,7 @@ def preflight(state: ConversationState) -> Dict[str, Any]:
     # Run the validator
     validator = LLMValidator(
         llm=llm,
-        system_prompt=ctx.system_prompt,
+        system_prompt=sys_prompt,
         quiz=quiz,
         pass_threshold=0.7,
     )
@@ -99,21 +111,32 @@ def preflight(state: ConversationState) -> Dict[str, Any]:
 
 def validate(state: ConversationState) -> Dict[str, Any]:
     """
-    Delegate validation to the injected ConversationContext.
-
-    The context owns all domain logic (what to validate, how to
-    evaluate rules, how to map violations to findings).  This node
-    simply asks it to run and stores the result.
+    Run validation — delegates to ProjectService when available,
+    falls back to ConversationContext for backwards compatibility.
     """
-    ctx: ConversationContext = state["context"]
     prior_findings = state.get("findings", [])
 
-    result = ctx.validate(prior_findings)
+    svc: Optional[ProjectService] = state.get("project_service")
+    project_name: Optional[str] = state.get("project_name")
 
-    return {
-        "findings": result.findings,
-        "status": "running",
-    }
+    if svc and project_name:
+        result = svc.validate_findings(project_name, prior_findings)
+        return {
+            "findings": result.findings,
+            "status": "running",
+        }
+
+    # Legacy fallback: use ConversationContext
+    ctx: Optional[ConversationContext] = state.get("context")
+    if ctx:
+        result = ctx.validate(prior_findings)
+        return {
+            "findings": result.findings,
+            "status": "running",
+        }
+
+    logger.error("validate: no project_service and no context available")
+    return {"status": "error"}
 
 
 # ── converse ─────────────────────────────────────────────────────────
@@ -138,12 +161,24 @@ def _converse_simple(state: ConversationState) -> Dict[str, Any]:
     Used when no ToolClient is injected (backwards compat, basic tests).
     LLM produces text → optionally surface to human → bump turn.
     """
-    ctx: ConversationContext = state["context"]
+    svc: Optional[ProjectService] = state.get("project_service")
+    ctx: Optional[ConversationContext] = state.get("context")
     open_findings = [f for f in state.get("findings", []) if not f.resolved]
     llm: Optional[CallLLM] = state.get("llm")
     human: Optional[CallHuman] = state.get("human")
     messages = state.get("messages", [])
     current_turn = state.get("current_turn", 0)
+
+    # Resolve system_prompt and format_finding_summary from service or context
+    if svc:
+        sys_prompt = svc.system_prompt
+        finding_summary = svc.format_finding_summary(open_findings)
+    elif ctx:
+        sys_prompt = ctx.system_prompt
+        finding_summary = ctx.format_finding_summary(open_findings)
+    else:
+        sys_prompt = ""
+        finding_summary = _build_findings_context(open_findings)
 
     if llm:
         findings_context = _build_findings_context(open_findings)
@@ -164,7 +199,7 @@ def _converse_simple(state: ConversationState) -> Dict[str, Any]:
             )
 
         request = LLMRequest(
-            system_prompt=ctx.system_prompt,
+            system_prompt=sys_prompt,
             user_message=user_message,
             context={
                 "session_id": state.get("session_id"),
@@ -176,9 +211,9 @@ def _converse_simple(state: ConversationState) -> Dict[str, Any]:
             response = llm(request)
             ai_text = response.content
         except Exception as e:
-            ai_text = f"LLM error: {e}. {ctx.format_finding_summary(open_findings)}"
+            ai_text = f"LLM error: {e}. {finding_summary}"
     else:
-        ai_text = ctx.format_finding_summary(open_findings)
+        ai_text = finding_summary
 
     new_messages: List = [AIMessage(content=ai_text)]
 
@@ -208,13 +243,22 @@ def _converse_agent(state: ConversationState) -> Dict[str, Any]:
 
     Tool calls are executed via the ToolClient (validated, auditable).
     """
-    ctx: ConversationContext = state["context"]
+    svc: Optional[ProjectService] = state.get("project_service")
+    ctx: Optional[ConversationContext] = state.get("context")
     open_findings = [f for f in state.get("findings", []) if not f.resolved]
     tool_client: ToolClient = state["tool_client"]
     current_turn = state.get("current_turn", 0)
     new_messages: List = []
     status_update: Optional[str] = None
     findings_update = None
+
+    # Resolve system_prompt from service or context
+    if svc:
+        sys_prompt = svc.system_prompt
+    elif ctx:
+        sys_prompt = ctx.system_prompt
+    else:
+        sys_prompt = ""
 
     # Build the ChatOpenAI model with tools bound
     # We access the underlying ChatOpenAI from the adapter
@@ -241,7 +285,7 @@ def _converse_agent(state: ConversationState) -> Dict[str, Any]:
     findings_context = _build_findings_context(open_findings)
 
     chat_messages = [
-        SystemMessage(content=ctx.system_prompt),
+        SystemMessage(content=sys_prompt),
     ]
 
     # Include prior conversation history  - todo - not wrong or right but lets understand why we are not using using langchain macros to append to existing list
@@ -357,31 +401,43 @@ def converse(state: ConversationState) -> Dict[str, Any]:
 
 def resolve_domain(state: ConversationState) -> Dict[str, Any]:
     """
-    Resolve the DomainConfig into a ready-to-use ConversationContext.
+    Ensure the conversation has what it needs before downstream nodes run.
 
-    This is the first node in the graph.  It ensures that ``context``
-    is populated before preflight / validate / converse run.
-
-    Scenarios
-    ---------
-    1. ``context`` already set → pass through (caller built it themselves).
-    2. ``project_name`` + ``project_store`` → load from store, build context.
-    3. Neither → ask the human for a project name (via CallHuman), then
-       return ``status="needs_project_name"`` so the router loops back.
-
-    Returns a partial state update.
+    Scenarios (checked in order):
+    1. ``project_service`` already set + ``project_name`` exists in service → ready.
+    2. ``context`` already set (legacy) → pass through.
+    3. ``project_name`` + ``project_service`` → verify project exists.
+    4. ``project_name`` + ``project_store`` (legacy) → load from store, build context.
+    5. No project_name + human available → ask human, loop back.
+    6. Fallback → error.
     """
     from conversation_engine.graph.architectural_context import (
         ArchitecturalOntologyContext,
     )
 
-    # ── Scenario 1: context already provided ──────────────────────
+    svc: Optional[ProjectService] = state.get("project_service")
+    project_name = state.get("project_name")
+
+    # ── Scenario 1: service + project_name → verify project exists ─
+    if svc and project_name:
+        if svc.exists(project_name):
+            logger.info("resolve_domain: project '%s' found in service", project_name)
+            return {"status": "running"}
+        else:
+            logger.warning("resolve_domain: project '%s' not found in service", project_name)
+            return {
+                "status": "error",
+                "messages": [
+                    AIMessage(content=f"Project '{project_name}' not found.")
+                ],
+            }
+
+    # ── Scenario 2: context already provided (legacy) ─────────────
     if state.get("context") is not None:
         logger.debug("resolve_domain: context already set — pass through")
         return {"status": "running"}
 
-    # ── Scenario 2: load from store by project name ───────────────
-    project_name = state.get("project_name")
+    # ── Scenario 3: project_name + project_store (legacy) ─────────
     store = state.get("project_store")
 
     if project_name and store:
@@ -399,7 +455,7 @@ def resolve_domain(state: ConversationState) -> Dict[str, Any]:
                 ],
             }
 
-    # ── Scenario 3: ask the human for a project name ─────────────
+    # ── Scenario 4: ask the human for a project name ─────────────
     human: Optional[CallHuman] = state.get("human")
     if human and not project_name:
         response = human(HumanRequest(
