@@ -73,14 +73,13 @@ class PathStep(BaseModel):
 class GraphQueryPattern(BaseNode):
     """
     A reusable query pattern for analyzing the knowledge graph.
-    
+
     Query patterns are AI reasoning tools that detect gaps, orphans,
     and completeness issues in the graph structure.
     """
-    # id: str = Field(..., description="Unique identifier for this query pattern")
-    # name: str = Field(..., description="Human-readable name")
+    node_type: NodeType = Field(NodeType.QUERY_PATTERN, description="Type of this node")
     description: str = Field(..., description="What this query detects")
-    
+
     subject_node_type: NodeType = Field(
         ...,
         description="The node type this query operates on"
@@ -89,7 +88,7 @@ class GraphQueryPattern(BaseNode):
         ...,
         description="The purpose of this query"
     )
-    
+
     checks: Optional[List[EdgeCheck]] = Field(
         None,
         description="Edge checks to perform (for gap/orphan detection)"
@@ -102,7 +101,7 @@ class GraphQueryPattern(BaseNode):
         None,
         description="Path pattern to follow (for lineage tracing)"
     )
-    
+
     output_kind: OutputKind = Field(..., description="Type of output to produce")
-    
+
     model_config = {"frozen": True}

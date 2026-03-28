@@ -24,26 +24,34 @@ from conversation_engine.models.nodes import (
     Component,
     Dependency,
     DocumentationArtifact,
+    Project,
 )
+from conversation_engine.models.rule_node import IntegrityRule
+from conversation_engine.models.validation_quiz import ValidationQuiz
+from conversation_engine.models.query_node import GraphQueryPattern
 
 
 T = TypeVar('T', bound=BaseNode)
 
-# Registry maps NodeType strings → concrete Pydantic classes for deserialisation.
-_NODE_TYPE_REGISTRY: Dict[str, type[BaseNode]] = {
-    "feature": Feature,
-    "goal": Goal,
-    "guiding_principle": GuidingPrinciple,
-    "requirement": Requirement,
-    "capability": Capability,
-    "use_case": UseCase,
-    "scenario": Scenario,
-    "design_artifact": DesignArtifact,
-    "decision": Decision,
-    "constraint": Constraint,
-    "component": Component,
-    "dependency": Dependency,
-    "documentation_artifact": DocumentationArtifact,
+# Registry maps NodeType enum values → concrete Pydantic classes for deserialisation.
+_NODE_TYPE_REGISTRY: Dict[NodeType, type[BaseNode]] = {
+    NodeType.FEATURE: Feature,
+    NodeType.GOAL: Goal,
+    NodeType.GUIDING_PRINCIPLE: GuidingPrinciple,
+    NodeType.REQUIREMENT: Requirement,
+    NodeType.CAPABILITY: Capability,
+    NodeType.USE_CASE: UseCase,
+    NodeType.SCENARIO: Scenario,
+    NodeType.DESIGN_ARTIFACT: DesignArtifact,
+    NodeType.DECISION: Decision,
+    NodeType.CONSTRAINT: Constraint,
+    NodeType.COMPONENT: Component,
+    NodeType.DEPENDENCY: Dependency,
+    NodeType.DOCUMENTATION_ARTIFACT: DocumentationArtifact,
+    NodeType.PROJECT: Project,
+    NodeType.RULE: IntegrityRule,
+    NodeType.QUIZ: ValidationQuiz,
+    NodeType.QUERY_PATTERN: GraphQueryPattern,
 }
 
 
@@ -428,10 +436,12 @@ class KnowledgeGraph:
         graph = cls()
 
         for node_data in data.get("nodes", []):
-            node_type = node_data.pop("_type", None)
-            if node_type is None:
+            node_type_str = node_data.pop("_type", None)
+            if node_type_str is None:
                 raise ValueError(f"Node data missing '_type': {node_data}")
 
+            # Convert string back to NodeType enum
+            node_type = NodeType(node_type_str)
             node_cls = _NODE_TYPE_REGISTRY.get(node_type)
             if node_cls is None:
                 raise ValueError(
@@ -449,31 +459,11 @@ class KnowledgeGraph:
     
     def _get_node_type(self, node: BaseNode) -> NodeType:
         """
-        Infer node type from the node class name.
+        Get node type from the node's node_type field.
         
-        This maps class names to NodeType literals.
+        This is much simpler than inferring from class names.
         """
-        class_name = node.__class__.__name__
-        
-        # Map class names to node types
-        type_map = {
-            "Project": "project",
-            "Feature": "feature",
-            "Goal": "goal",
-            "GuidingPrinciple": "guiding_principle",
-            "Requirement": "requirement",
-            "Capability": "capability",
-            "UseCase": "use_case",
-            "Scenario": "scenario",
-            "DesignArtifact": "design_artifact",
-            "Decision": "decision",
-            "Constraint": "constraint",
-            "Component": "component",
-            "Dependency": "dependency",
-            "DocumentationArtifact": "documentation_artifact",
-        }
-        
-        return type_map.get(class_name, class_name.lower())  # type: ignore
+        return node.node_type
     
     def _remove_edge_from_indexes(self, edge: BaseEdge) -> None:
         """Remove an edge from all indexes."""

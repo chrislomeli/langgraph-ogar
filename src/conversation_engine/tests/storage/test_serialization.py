@@ -57,7 +57,7 @@ def _sample_rules() -> list[IntegrityRule]:
             description="Every goal must have at least one requirement",
             applies_to_node_type="goal",
             rule_type="minimum_outgoing_edge_count",
-            edge_type="SATISFIED_BY",
+            # edge_type="SATISFIED_BY",
             target_node_types=["requirement"],
             minimum_count=1,
             severity="high",
@@ -174,7 +174,7 @@ class TestKnowledgeGraphSerialization:
 
     def test_unknown_node_type_raises(self):
         data = {"nodes": [{"_type": "alien", "id": "x", "name": "X"}], "edges": []}
-        with pytest.raises(ValueError, match="Unknown node type"):
+        with pytest.raises(ValueError, match="is not a valid NodeType"):
             KnowledgeGraph.from_dict(data)
 
     def test_missing_type_raises(self):

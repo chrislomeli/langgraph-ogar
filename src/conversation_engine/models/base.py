@@ -4,26 +4,30 @@ Base models for nodes and edges in the knowledge graph.
 from __future__ import annotations
 
 import uuid
+from enum import Enum
 from typing import Literal
 from pydantic import BaseModel, Field
 
 
-NodeType = Literal[
-    "project",
-    "feature",
-    "goal",
-    "guiding_principle",
-    "requirement",
-    "capability",
-    "use_case",
-    "scenario",
-    "design_artifact",
-    "decision",
-    "constraint",
-    "component",
-    "dependency",
-    "documentation_artifact",
-]
+class NodeType(str, Enum):
+    """Enum for all node types in the knowledge graph."""
+    PROJECT = "project"
+    FEATURE = "feature"
+    GOAL = "goal"
+    GUIDING_PRINCIPLE = "guiding_principle"
+    REQUIREMENT = "requirement"
+    CAPABILITY = "capability"
+    USE_CASE = "use_case"
+    SCENARIO = "scenario"
+    DESIGN_ARTIFACT = "design_artifact"
+    DECISION = "decision"
+    CONSTRAINT = "constraint"
+    COMPONENT = "component"
+    DEPENDENCY = "dependency"
+    DOCUMENTATION_ARTIFACT = "documentation_artifact"
+    RULE = "rule"
+    QUIZ = "quiz"
+    QUERY_PATTERN = "query_pattern"
 
 
 
@@ -54,9 +58,10 @@ class BaseNode(BaseModel):
     """
     Base class for all knowledge graph nodes.
     
-    All nodes have an ID and a name. Subclasses add domain-specific fields.
+    All nodes have an ID, name, and type. Subclasses add domain-specific fields.
     IDs are immutable; content fields can be updated.
     """
+    node_type: NodeType = Field(..., description="Type of this node")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Unique identifier for this node")
     name: str = Field(default_factory=lambda: "missing_name",  description="Human-readable name")
     

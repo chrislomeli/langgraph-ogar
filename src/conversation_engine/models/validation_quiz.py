@@ -8,8 +8,9 @@ zero infrastructure dependencies.  The infrastructure layer
 from __future__ import annotations
 
 from typing import List
+from pydantic import Field
 
-from conversation_engine.models import BaseNode
+from conversation_engine.models import BaseNode, NodeType
 
 
 class ValidationQuiz(BaseNode):
@@ -28,6 +29,7 @@ class ValidationQuiz(BaseNode):
         min_score: Minimum fraction of required_concepts that must be present
                   for this question to pass (0.0–1.0). Default 0.5.
     """
+    node_type: NodeType = Field(NodeType.QUIZ, description="Type of this node")
     question: str
     required_concepts: List[str]
     prohibited_concepts: List[str] = []

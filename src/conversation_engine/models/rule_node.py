@@ -26,8 +26,7 @@ class IntegrityRule(BaseNode):
     
     Rules are evaluated by the validation system to detect gaps or inconsistencies.
     """
-    # id: str = Field(..., description="Unique identifier for this rule")
-    # name: str = Field(..., description="Human-readable name")
+    node_type: NodeType = Field(NodeType.RULE, description="Type of this node")
     description: str = Field(..., description="Explanation of what this rule enforces")
     
     applies_to_node_type: NodeType = Field(

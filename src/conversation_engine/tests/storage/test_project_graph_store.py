@@ -31,7 +31,7 @@ from conversation_engine.infrastructure.llm.architectural_quiz import (
     ARCHITECTURAL_QUIZ,
 )
 from conversation_engine.models import Goal, Requirement
-from conversation_engine.models.base import BaseEdge
+from conversation_engine.models.base import BaseEdge, NodeType
 from conversation_engine.storage.snapshot_facade import graph_to_snapshot
 
 
@@ -108,14 +108,22 @@ class TestKnowledgeGraphTransforms:
         project_graph = project_to_graph(config)
         # todo add better asserts by type
 
+        def check_node(node_type: NodeType, expected: int):
+            nodes =  project_graph.get_nodes_by_type(node_type)
+            assert len(nodes) == expected
+
+
+
         project = project_graph.get_nodes_by_type("project")
         goals = project_graph.get_nodes_by_type("goal")
         reqs = project_graph.get_nodes_by_type("requirement")
         capabilities = project_graph.get_nodes_by_type("capability")
         components = project_graph.get_nodes_by_type("component")
+        rules = project_graph.get_nodes_by_type("rule")
 
         assert len(project) == 1
         assert len(goals) == 2
         assert len(reqs) == 2
         assert len(capabilities) == 2
         assert len(components) == 2
+        assert len(rules) == 1
