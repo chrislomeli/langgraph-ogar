@@ -8,7 +8,7 @@ Also validates that the evaluator accepts ProjectSpecification directly.
 from conversation_engine.models import Goal, Requirement, Component
 from conversation_engine.models.base import BaseEdge
 from conversation_engine.models.project_spec import ProjectSpecification, GoalSpec, RequirementSpec
-from conversation_engine.models.rules import IntegrityRule
+from conversation_engine.models.rule_node import IntegrityRule
 from conversation_engine.storage import KnowledgeGraph
 from conversation_engine.validation import RuleEvaluator
 from ogar.fixtures import (

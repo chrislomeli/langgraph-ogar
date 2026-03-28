@@ -16,7 +16,7 @@ from conversation_engine.graph.state import ConversationState
 from conversation_engine.infrastructure.llm.architectural_quiz import ARCHITECTURAL_QUIZ
 from conversation_engine.models.domain_config import DomainConfig
 from conversation_engine.models.project_spec import ProjectSpecification
-from conversation_engine.models.rules import IntegrityRule
+from conversation_engine.models.rule_node import IntegrityRule
 from conversation_engine.storage.graph import KnowledgeGraph
 from conversation_engine.storage.snapshot_facade import graph_to_snapshot
 

@@ -9,8 +9,7 @@ from __future__ import annotations
 from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
-from conversation_engine.models.base import EdgeType, NodeType
-
+from conversation_engine.models.base import EdgeType, NodeType, BaseNode
 
 QueryIntent = Literal[
     "gap_detection",
@@ -71,15 +70,15 @@ class PathStep(BaseModel):
     )
 
 
-class GraphQueryPattern(BaseModel):
+class GraphQueryPattern(BaseNode):
     """
     A reusable query pattern for analyzing the knowledge graph.
     
     Query patterns are AI reasoning tools that detect gaps, orphans,
     and completeness issues in the graph structure.
     """
-    id: str = Field(..., description="Unique identifier for this query pattern")
-    name: str = Field(..., description="Human-readable name")
+    # id: str = Field(..., description="Unique identifier for this query pattern")
+    # name: str = Field(..., description="Human-readable name")
     description: str = Field(..., description="What this query detects")
     
     subject_node_type: NodeType = Field(

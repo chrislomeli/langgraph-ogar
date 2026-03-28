@@ -7,16 +7,18 @@ zero infrastructure dependencies.  The infrastructure layer
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import List
 
+from conversation_engine.models import BaseNode
 
-@dataclass(frozen=True)
-class ValidationQuiz:
+
+class ValidationQuiz(BaseNode):
     """
     A single quiz question for LLM pre-run validation.
 
     Attributes:
+        id: Unique identifier for this quiz question.
+        name: Human-readable name for this quiz question.
         question: The question to ask the LLM.
         required_concepts: Keywords/phrases that MUST appear in the response
                           (case-insensitive). Each found concept scores equally.
@@ -28,6 +30,6 @@ class ValidationQuiz:
     """
     question: str
     required_concepts: List[str]
-    prohibited_concepts: List[str] = field(default_factory=list)
+    prohibited_concepts: List[str] = []
     weight: float = 1.0
     min_score: float = 0.5

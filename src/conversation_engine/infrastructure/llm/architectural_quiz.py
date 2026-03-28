@@ -79,6 +79,8 @@ ARCHITECTURAL_QUIZ: list[ValidationQuiz] = [
 
     # Q1: Node types
     ValidationQuiz(
+        id="quiz-node-types",
+        name="Node Types Quiz",
         question=(
             "What are the main node types in the knowledge graph? "
             "List as many as you can."
@@ -93,6 +95,8 @@ ARCHITECTURAL_QUIZ: list[ValidationQuiz] = [
 
     # Q2: Edge types and traceability
     ValidationQuiz(
+        id="quiz-edge-traceability",
+        name="Edge Types and Traceability Quiz",
         question=(
             "How does traceability work in this knowledge graph? "
             "Describe the chain from goals to components."
@@ -107,6 +111,8 @@ ARCHITECTURAL_QUIZ: list[ValidationQuiz] = [
 
     # Q3: Integrity rules
     ValidationQuiz(
+        id="quiz-integrity-rules",
+        name="Integrity Rules Quiz",
         question=(
             "What are the integrity rules? What happens when a goal "
             "has no requirements?"
@@ -123,6 +129,8 @@ ARCHITECTURAL_QUIZ: list[ValidationQuiz] = [
 
     # Q4: Findings and severity
     ValidationQuiz(
+        id="quiz-findings",
+        name="Findings and Severity Quiz",
         question=(
             "What is a 'finding' in this system? What information "
             "does a finding contain?"
@@ -136,6 +144,8 @@ ARCHITECTURAL_QUIZ: list[ValidationQuiz] = [
 
     # Q5: Role understanding
     ValidationQuiz(
+        id="quiz-role",
+        name="Role Understanding Quiz",
         question=(
             "What is your role in the conversation loop? "
             "Do you modify the knowledge graph directly?"
@@ -153,6 +163,8 @@ ARCHITECTURAL_QUIZ: list[ValidationQuiz] = [
 
     # Q6: Prioritization
     ValidationQuiz(
+        id="quiz-prioritization",
+        name="Prioritization Quiz",
         question=(
             "If there are 3 findings — one high severity, one medium, "
             "and one low — in what order should you address them?"
@@ -166,6 +178,8 @@ ARCHITECTURAL_QUIZ: list[ValidationQuiz] = [
 
     # Q7: Edge case — no findings
     ValidationQuiz(
+        id="quiz-no-findings",
+        name="No Findings Quiz",
         question=(
             "What should you tell the user if the validation pass "
             "produces zero findings?"

@@ -45,7 +45,7 @@ from conversation_engine.infrastructure.tool_client.project_graph_tools import (
     make_project_spec_tool,
 )
 from conversation_engine.models.domain_config import DomainConfig
-from conversation_engine.models.rules import IntegrityRule
+from conversation_engine.models.rule_node import IntegrityRule
 
 
 # ── Helpers ────────────────────────────────────────────────────────

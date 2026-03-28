@@ -17,8 +17,8 @@ from conversation_engine.models.project_spec import ProjectSpecification
 from conversation_engine.storage.graph import KnowledgeGraph
 from conversation_engine.storage.file_project_store import FileProjectStore
 from conversation_engine.storage.snapshot_facade import graph_to_snapshot
-from conversation_engine.models.rules import IntegrityRule
-from conversation_engine.models.queries import (
+from conversation_engine.models.rule_node import IntegrityRule
+from conversation_engine.models.query_node import (
     GraphQueryPattern,
     EdgeCheck,
 )
@@ -69,6 +69,8 @@ def _sample_rules() -> list[IntegrityRule]:
 def _sample_quiz() -> list[ValidationQuiz]:
     return [
         ValidationQuiz(
+            id="test-quiz-node-types",
+            name="Test Node Types Quiz",
             question="What node types exist?",
             required_concepts=["goal", "requirement"],
             prohibited_concepts=["hallucination"],

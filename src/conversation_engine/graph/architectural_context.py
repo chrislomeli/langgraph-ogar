@@ -19,8 +19,8 @@ from conversation_engine.graph.context import (
 )
 from conversation_engine.models.domain_config import DomainConfig
 from conversation_engine.models.project_spec import ProjectSpecification
-from conversation_engine.models.rules import IntegrityRule
-from conversation_engine.models.queries import GraphQueryPattern
+from conversation_engine.models.rule_node import IntegrityRule
+from conversation_engine.models.query_node import GraphQueryPattern
 from conversation_engine.storage.graph import KnowledgeGraph
 from conversation_engine.storage.snapshot_facade import snapshot_to_graph
 from conversation_engine.validation.evaluator import RuleEvaluator

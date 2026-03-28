@@ -42,7 +42,7 @@ if _env_file.exists():
 from conversation_engine.graph.builder import build_conversation_graph
 from conversation_engine.graph.architectural_context import ArchitecturalOntologyContext
 from conversation_engine.models.domain_config import DomainConfig
-from conversation_engine.models.rules import IntegrityRule
+from conversation_engine.models.rule_node import IntegrityRule
 from conversation_engine.storage.snapshot_facade import graph_to_snapshot
 from ogar.fixtures import create_graph_with_gaps
 from conversation_engine.infrastructure.llm import make_openai_llm

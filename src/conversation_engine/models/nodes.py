@@ -11,6 +11,27 @@ from pydantic import Field
 from conversation_engine.models.base import BaseNode
 
 
+"""
+    project_node = Project(
+        id=_slugify("project", project.project_name),
+        name=project.project_name,
+        system_prompt=project.system_prompt or "",
+        metadata=json.dumps(project.metadata),
+    )
+"""
+class Project(BaseNode):
+    """
+    A top level Project node.
+    """
+    system_prompt: Optional[str] = Field(
+        None,
+        description="top level project node"
+    )
+    metadata: Optional[str] = Field(
+        None,
+        description="top level project node"
+    )
+
 class Feature(BaseNode):
     """
     A feature represents a high-level system capability or product offering.

@@ -3,11 +3,13 @@ Base models for nodes and edges in the knowledge graph.
 """
 from __future__ import annotations
 
+import uuid
 from typing import Literal
 from pydantic import BaseModel, Field
 
 
 NodeType = Literal[
+    "project",
     "feature",
     "goal",
     "guiding_principle",
@@ -23,7 +25,18 @@ NodeType = Literal[
     "documentation_artifact",
 ]
 
+
+
 EdgeType = Literal[
+    "HAS_GOAL",
+    "HAS_REQUIREMENT",
+    "HAS_CAPABILITY",
+    "HAS_COMPONENT",
+    "HAS_DEPENDENCY",
+    "HAS_CONSTRAINT",
+    "HAS_RULE",
+    "HAS_QUIZ",
+    "HAS_QUERY_PATTERN",
     "SATISFIED_BY",
     "REALIZED_BY",
     "DEPENDS_ON",
@@ -44,8 +57,8 @@ class BaseNode(BaseModel):
     All nodes have an ID and a name. Subclasses add domain-specific fields.
     IDs are immutable; content fields can be updated.
     """
-    id: str = Field(..., description="Unique identifier for this node")
-    name: str = Field(..., description="Human-readable name")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Unique identifier for this node")
+    name: str = Field(default_factory=lambda: "missing_name",  description="Human-readable name")
     
     model_config = {"frozen": False}
 

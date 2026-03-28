@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from conversation_engine.models.base import BaseNode
 from conversation_engine.models.project_spec import ProjectSpecification
-from conversation_engine.models.rules import IntegrityRule, Severity
+from conversation_engine.models.rule_node import IntegrityRule, Severity
 from conversation_engine.storage.graph import KnowledgeGraph
 from conversation_engine.storage.snapshot_facade import snapshot_to_graph
 

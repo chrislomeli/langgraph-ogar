@@ -8,8 +8,7 @@ from __future__ import annotations
 from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
-from conversation_engine.models.base import EdgeType, NodeType
-
+from conversation_engine.models.base import EdgeType, NodeType, BaseNode
 
 RuleType = Literal[
     "minimum_outgoing_edge_count",
@@ -21,14 +20,14 @@ RuleType = Literal[
 Severity = Literal["low", "medium", "high"]
 
 
-class IntegrityRule(BaseModel):
+class IntegrityRule(BaseNode):
     """
     An integrity rule defines a constraint on the knowledge graph structure.
     
     Rules are evaluated by the validation system to detect gaps or inconsistencies.
     """
-    id: str = Field(..., description="Unique identifier for this rule")
-    name: str = Field(..., description="Human-readable name")
+    # id: str = Field(..., description="Unique identifier for this rule")
+    # name: str = Field(..., description="Human-readable name")
     description: str = Field(..., description="Explanation of what this rule enforces")
     
     applies_to_node_type: NodeType = Field(
@@ -36,8 +35,8 @@ class IntegrityRule(BaseModel):
         description="The node type this rule applies to"
     )
     rule_type: RuleType = Field(..., description="Type of validation check")
-    
-    edge_type: EdgeType = Field(..., description="The edge type to check")
+
+    edge_type: EdgeType = Field(..., description="The edge type to check")   # todo - remove this from IntegrityRule
     target_node_types: List[NodeType] = Field(
         ...,
         description="Valid target node types for the edge"

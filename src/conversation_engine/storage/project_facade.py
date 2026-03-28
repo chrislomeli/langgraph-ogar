@@ -1,7 +1,7 @@
 """
-ProjectSnapshot ↔ KnowledgeGraph facade.
+ProjectSpecification ↔ KnowledgeGraph facade.
 
-Converts the flat, business-level ``ProjectSnapshot`` to/from the internal
+Converts the flat, business-level ``ProjectSpecification`` to/from the internal
 ``KnowledgeGraph`` representation.  This is the only place that knows about
 node IDs, edge types, and edge directions.
 
@@ -17,21 +17,24 @@ Edge wiring rules (source --EDGE_TYPE--> target):
 """
 from __future__ import annotations
 
+import json
+import uuid
 from typing import Dict, List, Optional
 
 from conversation_engine.models.base import BaseEdge
+from conversation_engine.models.domain_config import DomainConfig
 from conversation_engine.models.nodes import (
     Goal,
     Requirement,
     Capability,
     Component,
     Constraint,
-    Dependency,
+    Dependency, Project,
 )
 from conversation_engine.storage.graph import KnowledgeGraph
 from conversation_engine.models.project_spec import (
     ProjectSpecification,
-    ProjectSnapshot,  # backwards-compatible alias
+    ProjectSpecification,  # backwards-compatible alias
     GoalSpec,
     RequirementSpec,
     CapabilitySpec,
@@ -40,30 +43,45 @@ from conversation_engine.models.project_spec import (
     DependencySpec,
 )
 
-
-def _slugify(prefix: str, name: str) -> str:
+# todo deprecate this
+def _create_id(prefix: str) -> str:
     """Deterministic ID from a prefix and a human-readable name."""
-    slug = name.strip().lower().replace(" ", "-")
-    return f"{prefix}-{slug}"
+    # slug = name.strip().lower().replace(" ", "-")
+    return prefix + str(uuid.uuid4())
+#
+#
+# # ── Snapshot → KnowledgeGraph ──────────────────────────────────────
+#
+# class SnapshotConversionError(Exception):
+#     """Raised when a snapshot contains invalid references."""
 
-
-# ── Snapshot → KnowledgeGraph ──────────────────────────────────────
 
 class SnapshotConversionError(Exception):
     """Raised when a snapshot contains invalid references."""
 
 
-def snapshot_to_graph(snapshot: ProjectSpecification) -> KnowledgeGraph:
-    """
-    Convert a ``ProjectSnapshot`` to a ``KnowledgeGraph``.
-
-    Generates deterministic node IDs from names, creates typed nodes,
-    and wires edges with the correct types and directions.
-
-    Raises:
-        SnapshotConversionError: If a name-based reference cannot be resolved.
-    """
+def project_to_graph(project: DomainConfig) -> KnowledgeGraph:
     graph = KnowledgeGraph()
+    project_spec = project.project_spec
+
+    # todo - we need to add these and create a top level node?
+    rules = project.rules
+    quiz= project.quiz
+    query_patterns = project.query_patterns
+    system_prompt= project.system_prompt
+    metadata=project.metadata
+
+
+    # 1. Add the root Project node
+    project_id = _create_id("project")
+    project_node = Project(
+        id=project_id, # _slugify("project", project.project_name),
+        name=project.project_name,
+        system_prompt=project.system_prompt or "",
+        metadata=json.dumps(project.metadata),
+    )
+    graph.add_node(project_node)
+
 
     # ── Name → ID registries (built as nodes are added) ────────────
     goal_ids: Dict[str, str] = {}
@@ -72,15 +90,33 @@ def snapshot_to_graph(snapshot: ProjectSpecification) -> KnowledgeGraph:
     comp_ids: Dict[str, str] = {}
     dep_ids: Dict[str, str] = {}
 
+    # ── rules ──────────────────────────────────────────────────────
+    for spec in project.rules:
+        nid = _create_id("rule")
+        # Create a copy with the new ID
+        rule_with_id = spec.model_copy(update={"id": nid})
+        graph.add_node(rule_with_id)
+        graph.add_edge(BaseEdge(
+            edge_type="HAS_RULE",
+            source_id=project_id,
+            target_id=nid,
+        ))
+
     # ── Goals ──────────────────────────────────────────────────────
-    for spec in snapshot.goals:
-        nid = _slugify("goal", spec.name)
+    for spec in project_spec.goals:
+        nid = _create_id("goal")
         goal_ids[spec.name] = nid
         graph.add_node(Goal(id=nid, name=spec.name, statement=spec.statement))
+        # Wire: wire to project
+        graph.add_edge(BaseEdge(
+            edge_type="HAS_GOAL",
+            source_id=project_id,
+            target_id=nid,
+        ))
 
     # ── Requirements (→ Goal via SATISFIED_BY) ─────────────────────
-    for spec in snapshot.requirements:
-        nid = _slugify("req", spec.name)
+    for spec in project_spec.requirements:
+        nid = _create_id("req")
         req_ids[spec.name] = nid
         graph.add_node(Requirement(
             id=nid,
@@ -88,6 +124,13 @@ def snapshot_to_graph(snapshot: ProjectSpecification) -> KnowledgeGraph:
             requirement_type=spec.requirement_type,
             description=spec.description,
         ))
+        # Wire: wire to project
+        graph.add_edge(BaseEdge(
+            edge_type="HAS_REQUIREMENT",
+            source_id=project_id,
+            target_id=nid,
+        ))
+
         # Wire: Goal --SATISFIED_BY--> Requirement
         if spec.goal_ref:
             goal_id = goal_ids.get(spec.goal_ref)
@@ -103,14 +146,21 @@ def snapshot_to_graph(snapshot: ProjectSpecification) -> KnowledgeGraph:
             ))
 
     # ── Capabilities (→ Requirement via REALIZED_BY) ───────────────
-    for spec in snapshot.capabilities:
-        nid = _slugify("cap", spec.name)
+    for spec in project_spec.capabilities:
+        nid = _create_id("cap")
         cap_ids[spec.name] = nid
         graph.add_node(Capability(
             id=nid,
             name=spec.name,
             description=spec.description,
         ))
+        # Wire: wire to project
+        graph.add_edge(BaseEdge(
+            edge_type="HAS_CAPABILITY",
+            source_id=project_id,
+            target_id=nid,
+        ))
+
         for ref in spec.requirement_refs:
             req_id = req_ids.get(ref)
             if req_id is None:
@@ -125,18 +175,24 @@ def snapshot_to_graph(snapshot: ProjectSpecification) -> KnowledgeGraph:
             ))
 
     # ── Dependencies (added before components so refs resolve) ─────
-    for spec in snapshot.dependencies:
-        nid = _slugify("dep", spec.name)
+    for spec in project_spec.dependencies:
+        nid = _create_id("dep")
         dep_ids[spec.name] = nid
         graph.add_node(Dependency(
             id=nid,
             name=spec.name,
             description=spec.description,
         ))
+        # Wire: wire to project  todo - wire dependencies to a goal instead of at the project level?
+        graph.add_edge(BaseEdge(
+            edge_type="HAS_DEPENDENCY",
+            source_id=project_id,
+            target_id=nid,
+        ))
 
     # ── Components (→ Capability via REALIZED_BY, → Dependency via DEPENDS_ON)
-    for spec in snapshot.components:
-        nid = _slugify("comp", spec.name)
+    for spec in project_spec.components:
+        nid = _create_id("comp")
         comp_ids[spec.name] = nid
         graph.add_node(Component(
             id=nid,
@@ -144,6 +200,13 @@ def snapshot_to_graph(snapshot: ProjectSpecification) -> KnowledgeGraph:
             description=spec.description,
             has_no_dependencies=spec.has_no_dependencies,
         ))
+        # Wire: wire to project  todo - wire components to a goal instead of at the project level?
+        graph.add_edge(BaseEdge(
+            edge_type="HAS_COMPONENT",
+            source_id=project_id,
+            target_id=nid,
+        ))
+
         for ref in spec.capability_refs:
             cap_id = cap_ids.get(ref)
             if cap_id is None:
@@ -170,18 +233,24 @@ def snapshot_to_graph(snapshot: ProjectSpecification) -> KnowledgeGraph:
             ))
 
     # ── Constraints (standalone — no automatic edges) ──────────────
-    for spec in snapshot.constraints:
-        nid = _slugify("cstr", spec.name)
+    for spec in project_spec.constraints:
+        nid = _create_id("cstr")
         graph.add_node(Constraint(id=nid, name=spec.name, statement=spec.statement))
+        # Wire: wire to project  todo - wire components to a goal instead of at the project level?
+        graph.add_edge(BaseEdge(
+            edge_type="HAS_CONSTRAINT",
+            source_id=project_id,
+            target_id=nid,
+        ))
 
     return graph
 
 
 # ── KnowledgeGraph → Snapshot ──────────────────────────────────────
 
-def graph_to_snapshot(project_name: str, graph: KnowledgeGraph) -> ProjectSnapshot:
+def graph_to_snapshot(project_name: str, graph: KnowledgeGraph) -> ProjectSpecification:
     """
-    Convert a ``KnowledgeGraph`` back to a ``ProjectSnapshot``.
+    Convert a ``KnowledgeGraph`` back to a ``ProjectSpecification``.
 
     Reconstructs name-based references by following edges in reverse.
     Nodes without matching types are silently skipped (forward-compatible
@@ -288,7 +357,7 @@ def graph_to_snapshot(project_name: str, graph: KnowledgeGraph) -> ProjectSnapsh
         for d in deps_by_id.values()
     ]
 
-    return ProjectSnapshot(
+    return ProjectSpecification(
         project_name=project_name,
         goals=goal_specs,
         requirements=req_specs,

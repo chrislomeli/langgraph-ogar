@@ -457,6 +457,7 @@ class KnowledgeGraph:
         
         # Map class names to node types
         type_map = {
+            "Project": "project",
             "Feature": "feature",
             "Goal": "goal",
             "GuidingPrinciple": "guiding_principle",

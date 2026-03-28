@@ -244,7 +244,7 @@ from conversation_engine.graph import (
     DomainConfig,
 )
 from ogar.fixtures import create_graph_with_gaps
-from conversation_engine.models.rules import IntegrityRule
+from conversation_engine.models.rule_node import IntegrityRule
 
 config = DomainConfig(
     project_name="my-project",

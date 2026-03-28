@@ -17,8 +17,8 @@ from conversation_engine.storage.project_store import (
     ProjectStore,
 )
 from conversation_engine.storage.graph import KnowledgeGraph
-from conversation_engine.models.rules import IntegrityRule
-from conversation_engine.models.queries import GraphQueryPattern
+from conversation_engine.models.rule_node import IntegrityRule
+from conversation_engine.models.query_node import GraphQueryPattern
 from conversation_engine.models.validation_quiz import ValidationQuiz
 from conversation_engine.graph.architectural_context import (
     ArchitecturalOntologyContext,

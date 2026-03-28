@@ -24,10 +24,36 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from conversation_engine.models.queries import GraphQueryPattern
-from conversation_engine.models.rules import IntegrityRule
+from conversation_engine.models.query_node import GraphQueryPattern
+from conversation_engine.models.rule_node import IntegrityRule
 from conversation_engine.models.validation_quiz import ValidationQuiz
 from conversation_engine.models.project_spec import ProjectSpecification
+
+@dataclass(frozen=True)
+class ControlSet:
+    """
+    A subset of the domain DomainConfig specification for a project.
+
+    This is a pure value object — no behavior, no side-effects.
+    The ``ConversationContext`` implementation *consumes* a DomainConfig;
+    graph nodes *inspect* it to decide what still needs gathering.
+
+    Attributes:
+        project_name: Unique human-readable project identifier.
+        project_spec: Flat, business-level project specification (no graph).
+        rules: Integrity rules the graph must satisfy.
+        quiz: LLM pre-flight validation questions.
+        query_patterns: Reusable graph query patterns for AI reasoning.
+        system_prompt: The system prompt that teaches an LLM about this domain.
+        metadata: Arbitrary extra data (version, owner, timestamps, etc.).
+    """
+
+    project_name: str
+    rules: Optional[List[IntegrityRule]] = None
+    quiz: Optional[List[ValidationQuiz]] = None
+    query_patterns: Optional[List[GraphQueryPattern]] = None
+    system_prompt: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -146,6 +172,8 @@ class DomainConfig:
 
 def _quiz_to_dict(q: ValidationQuiz) -> Dict[str, Any]:
     return {
+        "id": q.id,
+        "name": q.name,
         "question": q.question,
         "required_concepts": list(q.required_concepts),
         "prohibited_concepts": list(q.prohibited_concepts),
@@ -156,6 +184,8 @@ def _quiz_to_dict(q: ValidationQuiz) -> Dict[str, Any]:
 
 def _quiz_from_dict(d: Dict[str, Any]) -> ValidationQuiz:
     return ValidationQuiz(
+        id=d["id"],
+        name=d["name"],
         question=d["question"],
         required_concepts=d["required_concepts"],
         prohibited_concepts=d.get("prohibited_concepts", []),

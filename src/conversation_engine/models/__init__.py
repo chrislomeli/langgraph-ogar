@@ -23,12 +23,12 @@ from conversation_engine.models.traceability import (
     CapabilityComponentTrace,
     ComponentDependencyTrace,
 )
-from conversation_engine.models.rules import (
+from conversation_engine.models.rule_node import (
     RuleType,
     Severity,
     IntegrityRule,
 )
-from conversation_engine.models.queries import (
+from conversation_engine.models.query_node import (
     QueryIntent,
     OutputKind,
     EdgeCheck,

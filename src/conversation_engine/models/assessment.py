@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
-from conversation_engine.models.rules import Severity
+from conversation_engine.models.rule_node import Severity
 
 
 AssessmentType = Literal[
