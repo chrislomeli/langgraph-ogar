@@ -29,8 +29,9 @@ from conversation_engine.models.nodes import (
     Dependency,
 )
 from conversation_engine.storage.graph import KnowledgeGraph
-from conversation_engine.storage.snapshot import (
-    ProjectSnapshot,
+from conversation_engine.models.project_spec import (
+    ProjectSpecification,
+    ProjectSnapshot,  # backwards-compatible alias
     GoalSpec,
     RequirementSpec,
     CapabilitySpec,
@@ -88,17 +89,18 @@ def snapshot_to_graph(snapshot: ProjectSnapshot) -> KnowledgeGraph:
             description=spec.description,
         ))
         # Wire: Goal --SATISFIED_BY--> Requirement
-        goal_id = goal_ids.get(spec.goal_ref)
-        if goal_id is None:
-            raise SnapshotConversionError(
-                f"Requirement '{spec.name}' references unknown goal '{spec.goal_ref}'. "
-                f"Known goals: {sorted(goal_ids)}"
-            )
-        graph.add_edge(BaseEdge(
-            edge_type="SATISFIED_BY",
-            source_id=goal_id,
-            target_id=nid,
-        ))
+        if spec.goal_ref:
+            goal_id = goal_ids.get(spec.goal_ref)
+            if goal_id is None:
+                raise SnapshotConversionError(
+                    f"Requirement '{spec.name}' references unknown goal '{spec.goal_ref}'. "
+                    f"Known goals: {sorted(goal_ids)}"
+                )
+            graph.add_edge(BaseEdge(
+                edge_type="SATISFIED_BY",
+                source_id=goal_id,
+                target_id=nid,
+            ))
 
     # ── Capabilities (→ Requirement via REALIZED_BY) ───────────────
     for spec in snapshot.capabilities:

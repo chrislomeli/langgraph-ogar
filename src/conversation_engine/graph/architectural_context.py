@@ -18,9 +18,11 @@ from conversation_engine.graph.context import (
     ValidationResult,
 )
 from conversation_engine.models.domain_config import DomainConfig
+from conversation_engine.models.project_spec import ProjectSpecification
 from conversation_engine.models.rules import IntegrityRule
 from conversation_engine.models.queries import GraphQueryPattern
 from conversation_engine.storage.graph import KnowledgeGraph
+from conversation_engine.storage.snapshot_facade import snapshot_to_graph
 from conversation_engine.validation.evaluator import RuleEvaluator
 from conversation_engine.models.validation_quiz import ValidationQuiz
 from conversation_engine.infrastructure.llm.architectural_quiz import (
@@ -56,7 +58,11 @@ class ArchitecturalOntologyContext:
 
     def __init__(self, config: DomainConfig) -> None:
         self._config = config
-        self._graph = config.knowledge_graph or KnowledgeGraph()
+        # Build the graph at runtime from the flat spec via the facade
+        if config.project_spec is not None:
+            self._graph = snapshot_to_graph(config.project_spec)
+        else:
+            self._graph = KnowledgeGraph()
         self._rules = config.rules or []
         self._query_patterns = config.query_patterns or []
 
@@ -75,9 +81,11 @@ class ArchitecturalOntologyContext:
         Wraps the individual arguments into a DomainConfig and delegates
         to the primary constructor.
         """
+        from conversation_engine.storage.snapshot_facade import graph_to_snapshot
+        spec = graph_to_snapshot("unnamed", graph)
         return cls(DomainConfig(
             project_name="unnamed",
-            knowledge_graph=graph,
+            project_spec=spec,
             rules=rules,
             query_patterns=query_patterns,
             system_prompt=system_prompt,

@@ -43,6 +43,7 @@ from conversation_engine.graph.builder import build_conversation_graph
 from conversation_engine.graph.architectural_context import ArchitecturalOntologyContext
 from conversation_engine.models.domain_config import DomainConfig
 from conversation_engine.models.rules import IntegrityRule
+from conversation_engine.storage.snapshot_facade import graph_to_snapshot
 from ogar.fixtures import create_graph_with_gaps
 from conversation_engine.infrastructure.llm import make_openai_llm
 from conversation_engine.infrastructure.middleware import (
@@ -84,9 +85,10 @@ def build_context() -> ArchitecturalOntologyContext:
         ),
     ]
 
-    config = DomainConfig(project_name="architectural-demo", knowledge_graph=graph, rules=rules)
+    spec = graph_to_snapshot("architectural-demo", graph)
+    config = DomainConfig(project_name="architectural-demo", project_spec=spec, rules=rules)
     ctx = ArchitecturalOntologyContext(config)
-    print(f"  Graph: {graph.node_count()} nodes, {graph.edge_count()} edges")
+    print(f"  Graph: {ctx.graph.node_count()} nodes, {ctx.graph.edge_count()} edges")
     print(f"  Rules: {len(rules)}")
     print(f"  Preflight quiz: {len(ctx.preflight_quiz)} questions")
     return ctx

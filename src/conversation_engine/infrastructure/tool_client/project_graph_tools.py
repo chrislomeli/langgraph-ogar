@@ -1,17 +1,15 @@
 """
-Knowledge-graph tool — business-level CRD operations for the ReAct agent.
+project_spec tool — CRUD operations on ProjectSpecification for the ReAct agent.
 
-The LLM interacts with ``ProjectSnapshot`` (flat, name-based references).
-It never sees nodes, edges, or IDs.  The tool handler converts snapshots
-to/from the internal ``KnowledgeGraph`` via the snapshot facade, and
-persists them through the ``ProjectStore``.
+The LLM interacts with ``ProjectSpecification`` (flat, name-based references).
+It never sees nodes, edges, or IDs.  The tool validates references via the
+snapshot facade and persists specs through the ``ProjectStore``.
 
 Methods:
-    CREATE(payload)  — persist a new project from a ProjectSnapshot
-    READ(key)        — retrieve an existing project as a ProjectSnapshot
-    DELETE(key)      — remove a project by name
-
-Update semantics: DELETE + CREATE (safe MVP approach).
+    CREATE(payload)      — persist a new project from a ProjectSpecification
+    READ(key)            — retrieve an existing project as a ProjectSpecification
+    UPDATE(key, payload) — full-replace the spec, preserving control fields
+    DELETE(key)          — remove a project by name
 """
 from __future__ import annotations
 
@@ -40,39 +38,40 @@ class CRUDMethod(str, Enum):
 
 
 class ProjectGraphInput(BaseModel):
-    """Input for the knowledge_graph tool."""
+    """Input for the project_spec tool."""
     method: CRUDMethod = Field(
         ...,
         description=(
             "The operation to perform: "
             "CREATE to persist a new project, "
             "READ to retrieve an existing project, "
+            "UPDATE to full-replace the spec (preserves rules/quiz/prompt), "
             "DELETE to remove a project."
         ),
     )
     key: Optional[str] = Field(
         None,
         description=(
-            "Project name — required for READ and DELETE. "
+            "Project name — required for READ, UPDATE, and DELETE. "
             "For CREATE, the project name is taken from the payload."
         ),
     )
     payload: Optional[ProjectSnapshot] = Field(
         None,
         description=(
-            "The project data — required for CREATE. "
+            "The project data — required for CREATE and UPDATE. "
             "Omit for READ and DELETE."
         ),
     )
 
 
 class ProjectGraphOutput(BaseModel):
-    """Output from the knowledge_graph tool."""
+    """Output from the project_spec tool."""
     success: bool = Field(..., description="Whether the operation succeeded")
     message: str = Field(default="", description="Human-readable status message")
     payload: Optional[ProjectSnapshot] = Field(
         None,
-        description="The project data — returned by READ, None for CREATE and DELETE.",
+        description="The project data — returned by READ and UPDATE, None for CREATE and DELETE.",
     )
 
 
@@ -90,7 +89,8 @@ def _create_project(
                     "DELETE it first, then CREATE again.",
         )
     try:
-        graph = snapshot_to_graph(snapshot)
+        # Validate refs by attempting a graph conversion (but don't store the graph)
+        snapshot_to_graph(snapshot)
     except SnapshotConversionError as e:
         return ProjectGraphOutput(
             success=False,
@@ -98,13 +98,12 @@ def _create_project(
         )
     config = DomainConfig(
         project_name=snapshot.project_name,
-        knowledge_graph=graph,
+        project_spec=snapshot,
     )
     project_store.save(config)
     return ProjectGraphOutput(
         success=True,
-        message=f"Project '{snapshot.project_name}' created "
-                f"({graph.node_count()} nodes, {graph.edge_count()} edges).",
+        message=f"Project '{snapshot.project_name}' created.",
     )
 
 def _update_project(
@@ -112,11 +111,35 @@ def _update_project(
     key: str,
     snapshot: ProjectSnapshot,
 ) -> ProjectGraphOutput:
-    delete_result: ProjectGraphOutput = _delete_project(project_store, key)
-    if not delete_result.success:
-        return delete_result
-
-    return _create_project(project_store, snapshot)
+    """Full-replace the project spec, preserving control fields (rules, quiz, prompt, etc.)."""
+    existing = project_store.load(key)
+    if existing is None:
+        return ProjectGraphOutput(
+            success=False,
+            message=f"Project '{key}' not found. Use CREATE for new projects.",
+        )
+    try:
+        snapshot_to_graph(snapshot)
+    except SnapshotConversionError as e:
+        return ProjectGraphOutput(
+            success=False,
+            message=f"Invalid snapshot: {e}",
+        )
+    updated = DomainConfig(
+        project_name=existing.project_name,
+        project_spec=snapshot,
+        rules=existing.rules,
+        quiz=existing.quiz,
+        query_patterns=existing.query_patterns,
+        system_prompt=existing.system_prompt,
+        metadata=existing.metadata,
+    )
+    project_store.save(updated)
+    return ProjectGraphOutput(
+        success=True,
+        message=f"Project '{key}' updated.",
+        payload=snapshot,
+    )
 
 
 def _read_project(
@@ -130,17 +153,16 @@ def _read_project(
             success=False,
             message=f"Project '{key}' not found.",
         )
-    if config.knowledge_graph is None:
+    if config.project_spec is None:
         return ProjectGraphOutput(
             success=True,
-            message=f"Project '{key}' exists but has no knowledge graph.",
+            message=f"Project '{key}' exists but has no project specification.",
             payload=ProjectSnapshot(project_name=key),
         )
-    snapshot = graph_to_snapshot(key, config.knowledge_graph)
     return ProjectGraphOutput(
         success=True,
         message=f"Project '{key}' loaded.",
-        payload=snapshot,
+        payload=config.project_spec,
     )
 
 
@@ -163,9 +185,9 @@ def _delete_project(
 
 # ── Tool factory ───────────────────────────────────────────────────
 
-def make_project_graph_tool(project_store: ProjectStore) -> ToolSpec:
+def make_project_spec_tool(project_store: ProjectStore) -> ToolSpec:
     """
-    Create a knowledge_graph ToolSpec bound to a ProjectStore.
+    Create a project_spec ToolSpec bound to a ProjectStore.
 
     Parameters
     ----------
@@ -180,7 +202,7 @@ def make_project_graph_tool(project_store: ProjectStore) -> ToolSpec:
                 if input_.payload is None:
                     return ProjectGraphOutput(
                         success=False,
-                        message="CREATE requires a payload (ProjectSnapshot).",
+                        message="CREATE requires a payload (ProjectSpecification).",
                     )
                 return _create_project(project_store, input_.payload)
 
@@ -193,7 +215,7 @@ def make_project_graph_tool(project_store: ProjectStore) -> ToolSpec:
                 if input_.payload is None:
                     return ProjectGraphOutput(
                         success=False,
-                        message="UPDATE requires a payload (ProjectSnapshot).",
+                        message="UPDATE requires a payload (ProjectSpecification).",
                     )
                 return _update_project(project_store, input_.key, input_.payload)
 
@@ -216,23 +238,20 @@ def make_project_graph_tool(project_store: ProjectStore) -> ToolSpec:
             case _:
                 return ProjectGraphOutput(
                     success=False,
-                    message=f"Unknown method '{input_.method}'. Use CREATE, READ, or DELETE.",
+                    message=f"Unknown method '{input_.method}'. Use CREATE, READ, UPDATE, or DELETE.",
                 )
 
-
-
-
     return ToolSpec(
-        name="knowledge_graph",
+        name="project_spec",
         description=(
-            "Perform business-level operations on a project's knowledge graph. "
+            "CRUD operations on a project's specification. "
             "This is the sole interface for persisting and retrieving project data.\n\n"
             "Methods:\n"
-            "  CREATE(payload) — persist a new project from a ProjectSnapshot\n"
-            "  READ(key)       — retrieve an existing project as a ProjectSnapshot\n"
-            "  DELETE(key)     — remove a project by name\n\n"
-            "To update a project, DELETE it first then CREATE with the new data.\n\n"
-            "The payload is a ProjectSnapshot with goals, requirements, capabilities, "
+            "  CREATE(payload)      — persist a new project from a ProjectSpecification\n"
+            "  READ(key)            — retrieve an existing project as a ProjectSpecification\n"
+            "  UPDATE(key, payload) — full-replace the spec (rules/quiz/prompt preserved)\n"
+            "  DELETE(key)          — remove a project by name\n\n"
+            "The payload is a ProjectSpecification with goals, requirements, capabilities, "
             "components, constraints, and dependencies. Use name-based references "
             "(e.g. a requirement's goal_ref is the goal's name, not an ID)."
         ),
@@ -240,3 +259,8 @@ def make_project_graph_tool(project_store: ProjectStore) -> ToolSpec:
         output_model=ProjectGraphOutput,
         handler=handler,
     )
+
+
+def make_project_graph_tool(project_store: ProjectStore) -> ToolSpec:
+    """Legacy alias for make_project_spec_tool."""
+    return make_project_spec_tool(project_store)

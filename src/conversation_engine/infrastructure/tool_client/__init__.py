@@ -33,6 +33,7 @@ from conversation_engine.infrastructure.tool_client.conversation_tools import (
 from conversation_engine.infrastructure.tool_client.project_graph_tools import (
     ProjectGraphInput,
     ProjectGraphOutput,
+    make_project_spec_tool,
     make_project_graph_tool,
 )
 from conversation_engine.infrastructure.tool_client.langchain_bridge import (
@@ -59,9 +60,10 @@ __all__ = [
     "make_ask_human_tool",
     "make_revalidate_tool",
     "make_mark_complete_tool",
-    # Knowledge graph tools
+    # Project spec tools
     "ProjectGraphInput",
     "ProjectGraphOutput",
+    "make_project_spec_tool",
     "make_project_graph_tool",
     # LangChain bridge
     "specs_to_langchain_tools",

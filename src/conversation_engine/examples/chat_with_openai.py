@@ -30,6 +30,7 @@ from conversation_engine.graph import ConversationState
 from conversation_engine.infrastructure.llm.architectural_quiz import ARCHITECTURAL_QUIZ
 from conversation_engine.models import Goal, Requirement, BaseEdge
 from conversation_engine.storage import KnowledgeGraph
+from conversation_engine.storage.snapshot_facade import graph_to_snapshot
 
 # ── Setup path ────────────────────────────────────────────────────────
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -70,7 +71,7 @@ def _sample_config() -> DomainConfig:
     g.add_edge(BaseEdge(edge_type="SATISFIED_BY", source_id="g1", target_id="r1"))
     return DomainConfig(
         project_name="test-project",
-        knowledge_graph=g,
+        project_spec=graph_to_snapshot("test-project", g),
         quiz=list(ARCHITECTURAL_QUIZ),
         rules=[
             IntegrityRule(
@@ -152,7 +153,8 @@ def build_context() -> ArchitecturalOntologyContext:
             failure_message_template="Requirement '{subject_name}' has no capabilities.",
         ),
     ]
-    config = DomainConfig(project_name="architectural-chat", knowledge_graph=graph, rules=rules)
+    spec = graph_to_snapshot("architectural-chat", graph)
+    config = DomainConfig(project_name="architectural-chat", project_spec=spec, rules=rules)
     return ArchitecturalOntologyContext(config)
 
 

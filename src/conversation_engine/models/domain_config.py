@@ -15,7 +15,7 @@ Usage::
 
     cfg = DomainConfig(
         project_name="my-project",
-        knowledge_graph=graph,
+        project_spec=spec,
         rules=rules,
     )
 """
@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional
 from conversation_engine.models.queries import GraphQueryPattern
 from conversation_engine.models.rules import IntegrityRule
 from conversation_engine.models.validation_quiz import ValidationQuiz
-from conversation_engine.storage.graph import KnowledgeGraph
+from conversation_engine.models.project_spec import ProjectSpecification
 
 
 @dataclass(frozen=True)
@@ -41,7 +41,7 @@ class DomainConfig:
 
     Attributes:
         project_name: Unique human-readable project identifier.
-        knowledge_graph: The project's knowledge graph (nodes + edges).
+        project_spec: Flat, business-level project specification (no graph).
         rules: Integrity rules the graph must satisfy.
         quiz: LLM pre-flight validation questions.
         query_patterns: Reusable graph query patterns for AI reasoning.
@@ -50,7 +50,7 @@ class DomainConfig:
     """
 
     project_name: str
-    knowledge_graph: Optional[KnowledgeGraph] = None
+    project_spec: Optional[ProjectSpecification] = None
     rules: Optional[List[IntegrityRule]] = None
     quiz: Optional[List[ValidationQuiz]] = None
     query_patterns: Optional[List[GraphQueryPattern]] = None
@@ -63,7 +63,7 @@ class DomainConfig:
         """Return a new DomainConfig with the project_name changed."""
         return DomainConfig(
             project_name=project_name,
-            knowledge_graph=self.knowledge_graph,
+            project_spec=self.project_spec,
             rules=self.rules,
             quiz=self.quiz,
             query_patterns=self.query_patterns,
@@ -81,9 +81,9 @@ class DomainConfig:
         """
         return {
             "project_name": self.project_name,
-            "knowledge_graph": (
-                self.knowledge_graph.to_dict()
-                if self.knowledge_graph is not None
+            "project_spec": (
+                self.project_spec.model_dump()
+                if self.project_spec is not None
                 else None
             ),
             "rules": (
@@ -110,16 +110,16 @@ class DomainConfig:
         """
         Reconstruct a DomainConfig from the dict produced by ``to_dict()``.
         """
-        graph_data = data.get("knowledge_graph")
+        spec_data = data.get("project_spec")
         rules_data = data.get("rules")
         quiz_data = data.get("quiz")
         patterns_data = data.get("query_patterns")
 
         return cls(
             project_name=data["project_name"],
-            knowledge_graph=(
-                KnowledgeGraph.from_dict(graph_data)
-                if graph_data is not None
+            project_spec=(
+                ProjectSpecification.model_validate(spec_data)
+                if spec_data is not None
                 else None
             ),
             rules=(

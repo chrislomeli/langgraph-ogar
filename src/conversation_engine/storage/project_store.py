@@ -12,7 +12,7 @@ Usage::
     from conversation_engine.models.domain_config import DomainConfig
 
     store = InMemoryProjectStore()
-    store.save(DomainConfig(project_name="acme", knowledge_graph=graph, rules=rules))
+    store.save(DomainConfig(project_name="acme", project_spec=spec, rules=rules))
     cfg = store.load("acme")
 """
 from __future__ import annotations

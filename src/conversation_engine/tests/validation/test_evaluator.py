@@ -2,10 +2,12 @@
 Tests for RuleEvaluator.
 
 Validates that integrity rules are correctly evaluated against graph state.
+Also validates that the evaluator accepts ProjectSpecification directly.
 """
 
 from conversation_engine.models import Goal, Requirement, Component
 from conversation_engine.models.base import BaseEdge
+from conversation_engine.models.project_spec import ProjectSpecification, GoalSpec, RequirementSpec
 from conversation_engine.models.rules import IntegrityRule
 from conversation_engine.storage import KnowledgeGraph
 from conversation_engine.validation import RuleEvaluator
@@ -434,3 +436,87 @@ class TestWithFixtures:
         
         # Should have 2 violations (goal-2 and goal-3)
         assert len(violations) == 2
+
+
+class TestEvaluatorWithProjectSpecification:
+    """Test that RuleEvaluator accepts ProjectSpecification directly."""
+
+    _goal_req_rule = IntegrityRule(
+        id="rule-goal-req",
+        name="Goal → Requirement",
+        description="Every goal must have at least one requirement",
+        applies_to_node_type="goal",
+        rule_type="minimum_outgoing_edge_count",
+        edge_type="SATISFIED_BY",
+        target_node_types=["requirement"],
+        minimum_count=1,
+        severity="high",
+        failure_message_template="Goal '{subject_name}' has no requirements.",
+    )
+
+    def test_spec_no_violations(self):
+        """Complete spec produces no violations."""
+        spec = ProjectSpecification(
+            project_name="ok",
+            goals=[GoalSpec(name="G1", statement="A goal")],
+            requirements=[RequirementSpec(name="R1", goal_ref="G1")],
+        )
+        evaluator = RuleEvaluator(spec)
+        violations = evaluator.evaluate_rule(self._goal_req_rule)
+        assert len(violations) == 0
+
+    def test_spec_with_violations(self):
+        """Spec with orphan goal produces a violation."""
+        spec = ProjectSpecification(
+            project_name="gaps",
+            goals=[
+                GoalSpec(name="Connected", statement="Has a req"),
+                GoalSpec(name="Orphan", statement="No req"),
+            ],
+            requirements=[RequirementSpec(name="R1", goal_ref="Connected")],
+        )
+        evaluator = RuleEvaluator(spec)
+        violations = evaluator.evaluate_rule(self._goal_req_rule)
+        assert len(violations) == 1
+        assert "Orphan" in violations[0].message
+
+    def test_spec_multiple_rules(self):
+        """Multiple rules evaluated against a spec."""
+        req_cap_rule = IntegrityRule(
+            id="rule-req-cap",
+            name="Requirement → Capability",
+            description="Every requirement must have at least one capability",
+            applies_to_node_type="requirement",
+            rule_type="minimum_outgoing_edge_count",
+            edge_type="REALIZED_BY",
+            target_node_types=["capability"],
+            minimum_count=1,
+            severity="medium",
+            failure_message_template="Requirement '{subject_name}' has no capabilities.",
+        )
+        spec = ProjectSpecification(
+            project_name="multi",
+            goals=[GoalSpec(name="G1", statement="A goal")],
+            requirements=[RequirementSpec(name="R1", goal_ref="G1")],
+        )
+        evaluator = RuleEvaluator(spec)
+        violations = evaluator.evaluate_all_rules([self._goal_req_rule, req_cap_rule])
+        # G1→R1 satisfied, but R1 has no capability
+        assert len(violations) == 1
+        assert violations[0].rule_id == "rule-req-cap"
+
+    def test_empty_spec_no_violations(self):
+        """Empty spec has no nodes, so no violations."""
+        spec = ProjectSpecification(project_name="empty")
+        evaluator = RuleEvaluator(spec)
+        violations = evaluator.evaluate_rule(self._goal_req_rule)
+        assert len(violations) == 0
+
+    def test_graph_still_works(self):
+        """Backward compat: KnowledgeGraph input still works."""
+        graph = KnowledgeGraph()
+        goal = Goal(id="g1", name="G1", statement="Test")
+        graph.add_node(goal)
+        evaluator = RuleEvaluator(graph)
+        violations = evaluator.evaluate_rule(self._goal_req_rule)
+        assert len(violations) == 1

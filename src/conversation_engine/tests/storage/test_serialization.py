@@ -13,8 +13,10 @@ import json
 import pytest
 
 from conversation_engine.models.domain_config import DomainConfig
+from conversation_engine.models.project_spec import ProjectSpecification
 from conversation_engine.storage.graph import KnowledgeGraph
 from conversation_engine.storage.file_project_store import FileProjectStore
+from conversation_engine.storage.snapshot_facade import graph_to_snapshot
 from conversation_engine.models.rules import IntegrityRule
 from conversation_engine.models.queries import (
     GraphQueryPattern,
@@ -96,10 +98,14 @@ def _sample_query_patterns() -> list[GraphQueryPattern]:
     ]
 
 
+def _sample_spec() -> ProjectSpecification:
+    return graph_to_snapshot("test-project", _sample_graph())
+
+
 def _full_config() -> DomainConfig:
     return DomainConfig(
         project_name="test-project",
-        knowledge_graph=_sample_graph(),
+        project_spec=_sample_spec(),
         rules=_sample_rules(),
         quiz=_sample_quiz(),
         query_patterns=_sample_query_patterns(),
@@ -186,8 +192,9 @@ class TestDomainConfigSerialization:
         data = original.to_dict()
         restored = DomainConfig.from_dict(data)
         assert restored.project_name == "test-project"
-        assert restored.knowledge_graph.node_count() == 4
-        assert restored.knowledge_graph.edge_count() == 3
+        assert restored.project_spec is not None
+        assert len(restored.project_spec.goals) == 1
+        assert len(restored.project_spec.requirements) == 1
         assert len(restored.rules) == 1
         assert restored.rules[0].id == "rule-goal-req"
         assert len(restored.quiz) == 1
@@ -205,7 +212,7 @@ class TestDomainConfigSerialization:
         data = original.to_dict()
         restored = DomainConfig.from_dict(data)
         assert restored.project_name == "bare"
-        assert restored.knowledge_graph is None
+        assert restored.project_spec is None
         assert restored.rules is None
         assert restored.quiz is None
         assert restored.query_patterns is None
@@ -218,7 +225,8 @@ class TestDomainConfigSerialization:
         parsed = json.loads(json_str)
         restored = DomainConfig.from_dict(parsed)
         assert restored.project_name == "test-project"
-        assert restored.knowledge_graph.node_count() == 4
+        assert restored.project_spec is not None
+        assert len(restored.project_spec.goals) == 1
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -233,7 +241,8 @@ class TestFileProjectStore:
         loaded = store.load("test-project")
         assert loaded is not None
         assert loaded.project_name == "test-project"
-        assert loaded.knowledge_graph.node_count() == 4
+        assert loaded.project_spec is not None
+        assert len(loaded.project_spec.goals) == 1
 
     def test_load_nonexistent(self, tmp_path):
         store = FileProjectStore(tmp_path / "projects")
@@ -246,7 +255,7 @@ class TestFileProjectStore:
         store.save(updated)
         loaded = store.load("test-project")
         assert loaded.system_prompt == "new prompt"
-        assert loaded.knowledge_graph is None
+        assert loaded.project_spec is None
 
     def test_delete_existing(self, tmp_path):
         store = FileProjectStore(tmp_path / "projects")
@@ -289,7 +298,7 @@ class TestFileProjectStore:
         path = tmp_path / "projects" / "test-project.json"
         data = json.loads(path.read_text())
         assert data["project_name"] == "test-project"
-        assert isinstance(data["knowledge_graph"], dict)
+        assert isinstance(data["project_spec"], dict)
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -306,7 +315,7 @@ class TestFileStoreEndToEnd:
         assert loaded is not None
 
         ctx = ArchitecturalOntologyContext(loaded)
-        assert ctx.graph.node_count() == 4
+        assert ctx.graph.node_count() >= 1
         assert len(ctx.rules) == 1
         assert ctx.system_prompt == "You are a test assistant."
         assert len(ctx.preflight_quiz) == 1

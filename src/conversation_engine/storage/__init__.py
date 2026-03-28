@@ -15,8 +15,9 @@ from conversation_engine.storage.project_store import (
     InMemoryProjectStore,
 )
 from conversation_engine.storage.file_project_store import FileProjectStore
-from conversation_engine.storage.snapshot import (
-    ProjectSnapshot,
+from conversation_engine.models.project_spec import (
+    ProjectSpecification,
+    ProjectSnapshot,  # backwards-compatible alias
     GoalSpec,
     RequirementSpec,
     CapabilitySpec,
@@ -36,7 +37,8 @@ __all__ = [
     "ProjectStore",
     "InMemoryProjectStore",
     "FileProjectStore",
-    # Snapshot
+    # Project specification
+    "ProjectSpecification",
     "ProjectSnapshot",
     "GoalSpec",
     "RequirementSpec",

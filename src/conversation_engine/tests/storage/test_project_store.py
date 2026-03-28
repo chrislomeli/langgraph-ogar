@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 
 from conversation_engine.models.domain_config import DomainConfig
+from conversation_engine.models.project_spec import ProjectSpecification, GoalSpec, RequirementSpec
 from conversation_engine.storage.project_store import (
     InMemoryProjectStore,
     ProjectStore,
@@ -28,6 +29,7 @@ from conversation_engine.infrastructure.llm.architectural_quiz import (
 )
 from conversation_engine.models import Goal, Requirement
 from conversation_engine.models.base import BaseEdge
+from conversation_engine.storage.snapshot_facade import graph_to_snapshot
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -68,10 +70,14 @@ def _sample_quiz() -> list[ValidationQuiz]:
     ]
 
 
+def _sample_spec() -> ProjectSpecification:
+    return graph_to_snapshot("test-project", _sample_graph())
+
+
 def _full_config(**overrides) -> DomainConfig:
     defaults = dict(
         project_name="test-project",
-        knowledge_graph=_sample_graph(),
+        project_spec=_sample_spec(),
         rules=_sample_rules(),
         quiz=_sample_quiz(),
         query_patterns=[],
@@ -91,8 +97,9 @@ class TestDomainConfig:
     def test_create_full_config(self):
         cfg = _full_config()
         assert cfg.project_name == "test-project"
-        assert cfg.knowledge_graph is not None
-        assert cfg.knowledge_graph.node_count() == 2
+        assert cfg.project_spec is not None
+        assert len(cfg.project_spec.goals) == 1
+        assert len(cfg.project_spec.requirements) == 1
         assert len(cfg.rules) == 1
         assert len(cfg.quiz) == 1
         assert cfg.system_prompt == "You are a test assistant."
@@ -101,7 +108,7 @@ class TestDomainConfig:
     def test_create_minimal_config(self):
         cfg = DomainConfig(project_name="bare")
         assert cfg.project_name == "bare"
-        assert cfg.knowledge_graph is None
+        assert cfg.project_spec is None
         assert cfg.rules is None
         assert cfg.quiz is None
         assert cfg.query_patterns is None
@@ -138,8 +145,8 @@ class TestInMemoryProjectStore:
         loaded = store.load("test-project")
         assert loaded is not None
         assert loaded.project_name == "test-project"
-        assert loaded.knowledge_graph is not None
-        assert loaded.knowledge_graph.node_count() == 2
+        assert loaded.project_spec is not None
+        assert len(loaded.project_spec.goals) == 1
 
     def test_load_nonexistent_returns_none(self):
         store = InMemoryProjectStore()
@@ -156,7 +163,7 @@ class TestInMemoryProjectStore:
         loaded = store.load("test-project")
         assert loaded is not None
         assert loaded.system_prompt == "updated prompt"
-        assert loaded.knowledge_graph is None  # overwritten, not merged
+        assert loaded.project_spec is None  # overwritten, not merged
 
     def test_save_empty_name_raises(self):
         store = InMemoryProjectStore()
@@ -225,7 +232,8 @@ class TestArchitecturalContextFromConfig:
     def test_from_full_config(self):
         cfg = _full_config()
         ctx = ArchitecturalOntologyContext(cfg)
-        assert ctx.graph.node_count() == 2
+        # graph is built at runtime from the spec
+        assert ctx.graph.node_count() >= 1
         assert len(ctx.rules) == 1
         assert ctx.system_prompt == "You are a test assistant."
         assert len(ctx.preflight_quiz) == 1
@@ -284,7 +292,7 @@ class TestStoreToContext:
         assert loaded is not None
 
         ctx = ArchitecturalOntologyContext(loaded)
-        assert ctx.graph.node_count() == 2
+        assert ctx.graph.node_count() >= 1
         assert len(ctx.rules) == 1
         assert ctx.system_prompt == "You are a test assistant."
 

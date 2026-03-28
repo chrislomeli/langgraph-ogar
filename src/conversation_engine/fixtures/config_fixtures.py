@@ -15,8 +15,10 @@ from conversation_engine.graph.architectural_context import ArchitecturalOntolog
 from conversation_engine.graph.state import ConversationState
 from conversation_engine.infrastructure.llm.architectural_quiz import ARCHITECTURAL_QUIZ
 from conversation_engine.models.domain_config import DomainConfig
+from conversation_engine.models.project_spec import ProjectSpecification
 from conversation_engine.models.rules import IntegrityRule
 from conversation_engine.storage.graph import KnowledgeGraph
+from conversation_engine.storage.snapshot_facade import graph_to_snapshot
 
 
 # ── Rule factories ───────────────────────────────────────────────────
@@ -63,27 +65,31 @@ def standard_rules() -> List[IntegrityRule]:
 def sample_config(
     project_name: str = "test-project",
     graph: Optional[KnowledgeGraph] = None,
+    spec: Optional[ProjectSpecification] = None,
     rules: Optional[List[IntegrityRule]] = None,
     include_quiz: bool = True,
     system_prompt: str = "Test system prompt.",
 ) -> DomainConfig:
     """
-    Full DomainConfig with graph, rules, quiz, and system prompt.
+    Full DomainConfig with spec, rules, quiz, and system prompt.
 
-    If no graph is provided, creates a minimal goal→requirement graph.
+    If neither graph nor spec is provided, creates a minimal goal→requirement spec.
+    If graph is provided, converts it to a spec via the facade.
     """
-    if graph is None:
-        from conversation_engine.models import Goal, Requirement
-        from conversation_engine.models.base import BaseEdge
-        g = KnowledgeGraph()
-        g.add_node(Goal(id="g1", name="Goal 1", statement="A goal"))
-        g.add_node(Requirement(id="r1", name="Req 1"))
-        g.add_edge(BaseEdge(edge_type="SATISFIED_BY", source_id="g1", target_id="r1"))
-        graph = g
+    if spec is None:
+        if graph is None:
+            from conversation_engine.models import Goal, Requirement
+            from conversation_engine.models.base import BaseEdge
+            g = KnowledgeGraph()
+            g.add_node(Goal(id="g1", name="Goal 1", statement="A goal"))
+            g.add_node(Requirement(id="r1", name="Req 1"))
+            g.add_edge(BaseEdge(edge_type="SATISFIED_BY", source_id="g1", target_id="r1"))
+            graph = g
+        spec = graph_to_snapshot(project_name, graph)
 
     return DomainConfig(
         project_name=project_name,
-        knowledge_graph=graph,
+        project_spec=spec,
         quiz=list(ARCHITECTURAL_QUIZ) if include_quiz else None,
         rules=rules or [goal_req_rule()],
         system_prompt=system_prompt,
@@ -93,22 +99,25 @@ def sample_config(
 def partial_config(
     project_name: str = "test-project",
     graph: Optional[KnowledgeGraph] = None,
+    spec: Optional[ProjectSpecification] = None,
     rules: Optional[List[IntegrityRule]] = None,
     system_prompt: str = "Test system prompt.",
 ) -> DomainConfig:
     """DomainConfig without quiz (triggers default ARCHITECTURAL_QUIZ fallback)."""
-    if graph is None:
-        from conversation_engine.models import Goal, Requirement
-        from conversation_engine.models.base import BaseEdge
-        g = KnowledgeGraph()
-        g.add_node(Goal(id="g1", name="Goal 1", statement="A goal"))
-        g.add_node(Requirement(id="r1", name="Req 1"))
-        g.add_edge(BaseEdge(edge_type="SATISFIED_BY", source_id="g1", target_id="r1"))
-        graph = g
+    if spec is None:
+        if graph is None:
+            from conversation_engine.models import Goal, Requirement
+            from conversation_engine.models.base import BaseEdge
+            g = KnowledgeGraph()
+            g.add_node(Goal(id="g1", name="Goal 1", statement="A goal"))
+            g.add_node(Requirement(id="r1", name="Req 1"))
+            g.add_edge(BaseEdge(edge_type="SATISFIED_BY", source_id="g1", target_id="r1"))
+            graph = g
+        spec = graph_to_snapshot(project_name, graph)
 
     return DomainConfig(
         project_name=project_name,
-        knowledge_graph=graph,
+        project_spec=spec,
         rules=rules or [goal_req_rule()],
         system_prompt=system_prompt,
     )
@@ -122,9 +131,10 @@ def make_context(
     project_name: str = "test",
 ) -> ArchitecturalOntologyContext:
     """Build an ArchitecturalOntologyContext from a graph and optional rules."""
+    spec = graph_to_snapshot(project_name, graph)
     config = DomainConfig(
         project_name=project_name,
-        knowledge_graph=graph,
+        project_spec=spec,
         rules=rules or [goal_req_rule()],
     )
     return ArchitecturalOntologyContext(config)

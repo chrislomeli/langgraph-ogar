@@ -1,5 +1,5 @@
 """
-Tests for ProjectSnapshot, snapshot facade, and knowledge_graph tool.
+Tests for ProjectSnapshot, snapshot facade, and project_spec tool.
 
 Covers:
 - ProjectSnapshot model construction and validation
@@ -7,7 +7,7 @@ Covers:
 - graph_to_snapshot() — reverse conversion preserving names and refs
 - Round-trip: snapshot → graph → snapshot
 - SnapshotConversionError on bad references
-- make_knowledge_graph_tool() — CREATE, READ, DELETE via ToolSpec
+- make_project_spec_tool() — CREATE, READ, UPDATE, DELETE via ToolSpec
 """
 from __future__ import annotations
 
@@ -42,8 +42,10 @@ from conversation_engine.storage.snapshot_facade import (
 from conversation_engine.infrastructure.tool_client.project_graph_tools import (
     ProjectGraphInput,
     ProjectGraphOutput,
-    make_project_graph_tool,
+    make_project_spec_tool,
 )
+from conversation_engine.models.domain_config import DomainConfig
+from conversation_engine.models.rules import IntegrityRule
 
 
 # ── Helpers ────────────────────────────────────────────────────────
@@ -356,20 +358,21 @@ class TestRoundTrip:
         assert restored.requirements == []
 
 
-# ── make_knowledge_graph_tool ──────────────────────────────────────
+# ── make_project_spec_tool ─────────────────────────────────────────
 
-class TestKnowledgeGraphTool:
+class TestProjectSpecTool:
 
     def _make_tool(self):
         store = InMemoryProjectStore()
-        spec = make_project_graph_tool(store)
+        spec = make_project_spec_tool(store)
         return spec, store
 
     def test_tool_spec_metadata(self):
         spec, _ = self._make_tool()
-        assert spec.name == "knowledge_graph"
+        assert spec.name == "project_spec"
         assert "CREATE" in spec.description
         assert "READ" in spec.description
+        assert "UPDATE" in spec.description
         assert "DELETE" in spec.description
 
     def test_create_success(self):
@@ -451,28 +454,99 @@ class TestKnowledgeGraphTool:
         out = spec.handler(inp)
         assert out.success is False
 
-    def test_update_via_delete_then_create(self):
-        """MVP update: delete + create."""
+    def test_update_success(self):
+        """UPDATE full-replaces the spec and returns the new payload."""
         spec, store = self._make_tool()
         spec.handler(ProjectGraphInput(method="CREATE", payload=_sample_snapshot()))
 
-        # Delete
-        spec.handler(ProjectGraphInput(method="DELETE", key="acme"))
-        assert not store.exists("acme")
-
-        # Create with modified data
         updated = _sample_snapshot()
         updated.goals.append(GoalSpec(name="New Goal", statement="Added later"))
         updated.requirements.append(
             RequirementSpec(name="New Req", goal_ref="New Goal")
         )
-        out = spec.handler(ProjectGraphInput(method="CREATE", payload=updated))
+        out = spec.handler(ProjectGraphInput(method="UPDATE", key="acme", payload=updated))
         assert out.success is True
+        assert "updated" in out.message.lower()
+        assert out.payload is not None
+        assert len(out.payload.goals) == 2
 
-        # Verify
+        # Verify via READ
         read_out = spec.handler(ProjectGraphInput(method="READ", key="acme"))
         assert read_out.payload is not None
         assert len(read_out.payload.goals) == 2
+
+    def test_update_preserves_control_fields(self):
+        """UPDATE replaces spec but preserves rules, quiz, system_prompt, etc."""
+        tool, store = self._make_tool()
+
+        # Seed with a full DomainConfig that has control fields
+        rule = IntegrityRule(
+            id="r1", name="test rule", description="d",
+            applies_to_node_type="goal", rule_type="minimum_outgoing_edge_count",
+            edge_type="SATISFIED_BY", target_node_types=["requirement"],
+            minimum_count=1, severity="high",
+            failure_message_template="Goal '{subject_name}' has no requirements.",
+        )
+        config = DomainConfig(
+            project_name="acme",
+            project_spec=_sample_snapshot(),
+            rules=[rule],
+            system_prompt="Do not hallucinate.",
+        )
+        store.save(config)
+
+        # UPDATE spec only
+        new_spec = ProjectSnapshot(
+            project_name="acme",
+            goals=[GoalSpec(name="Only Goal", statement="Replaced")],
+        )
+        out = tool.handler(ProjectGraphInput(method="UPDATE", key="acme", payload=new_spec))
+        assert out.success is True
+
+        # Verify control fields survived
+        loaded = store.load("acme")
+        assert loaded is not None
+        assert len(loaded.project_spec.goals) == 1
+        assert loaded.project_spec.goals[0].name == "Only Goal"
+        assert loaded.rules is not None
+        assert len(loaded.rules) == 1
+        assert loaded.rules[0].id == "r1"
+        assert loaded.system_prompt == "Do not hallucinate."
+
+    def test_update_not_found(self):
+        """UPDATE on nonexistent project fails."""
+        spec, _ = self._make_tool()
+        out = spec.handler(ProjectGraphInput(
+            method="UPDATE", key="nope", payload=_sample_snapshot(),
+        ))
+        assert out.success is False
+        assert "not found" in out.message.lower()
+
+    def test_update_no_key(self):
+        """UPDATE without key fails."""
+        spec, _ = self._make_tool()
+        out = spec.handler(ProjectGraphInput(method="UPDATE", payload=_sample_snapshot()))
+        assert out.success is False
+        assert "key" in out.message.lower()
+
+    def test_update_no_payload(self):
+        """UPDATE without payload fails."""
+        spec, _ = self._make_tool()
+        out = spec.handler(ProjectGraphInput(method="UPDATE", key="acme"))
+        assert out.success is False
+        assert "payload" in out.message.lower()
+
+    def test_update_bad_ref_fails(self):
+        """UPDATE with invalid refs fails."""
+        spec, store = self._make_tool()
+        spec.handler(ProjectGraphInput(method="CREATE", payload=_sample_snapshot()))
+        bad = ProjectSnapshot(
+            project_name="acme",
+            requirements=[RequirementSpec(name="R", goal_ref="NoGoal")],
+        )
+        out = spec.handler(ProjectGraphInput(method="UPDATE", key="acme", payload=bad))
+        assert out.success is False
+        assert "invalid snapshot" in out.message.lower()
 
     def test_create_read_round_trip_preserves_data(self):
         """CREATE then READ returns equivalent data."""
@@ -496,13 +570,13 @@ class TestKnowledgeGraphTool:
             LocalToolClient,
         )
         store = InMemoryProjectStore()
-        spec = make_project_graph_tool(store)
+        spec = make_project_spec_tool(store)
         reg = ToolRegistry()
         reg.register(spec)
         client = LocalToolClient(reg)
 
         # CREATE
-        env = client.call("knowledge_graph", {
+        env = client.call("project_spec", {
             "method": "CREATE",
             "payload": _sample_snapshot().model_dump(),
         })
@@ -510,7 +584,22 @@ class TestKnowledgeGraphTool:
         assert env.structured["success"] is True
 
         # READ
-        env = client.call("knowledge_graph", {"method": "READ", "key": "acme"})
+        env = client.call("project_spec", {"method": "READ", "key": "acme"})
         assert not env.is_error
         assert env.structured["success"] is True
         assert env.structured["payload"]["project_name"] == "acme"
+
+        # UPDATE
+        updated = _sample_snapshot()
+        updated.goals.append(GoalSpec(name="New Goal", statement="Added"))
+        env = client.call("project_spec", {
+            "method": "UPDATE",
+            "key": "acme",
+            "payload": updated.model_dump(),
+        })
+        assert not env.is_error
+        assert env.structured["success"] is True
+
+        # Verify UPDATE via READ
+        env = client.call("project_spec", {"method": "READ", "key": "acme"})
+        assert len(env.structured["payload"]["goals"]) == 2

@@ -6,12 +6,14 @@ This is deterministic validation - no AI involved.
 """
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Optional, Union
 from pydantic import BaseModel, Field
 
 from conversation_engine.models.base import BaseNode
+from conversation_engine.models.project_spec import ProjectSpecification
 from conversation_engine.models.rules import IntegrityRule, Severity
 from conversation_engine.storage.graph import KnowledgeGraph
+from conversation_engine.storage.snapshot_facade import snapshot_to_graph
 
 
 class RuleViolation(BaseModel):
@@ -47,8 +49,11 @@ class RuleEvaluator:
     - Clear output: violations are actionable
     """
     
-    def __init__(self, graph: KnowledgeGraph):
-        self.graph = graph
+    def __init__(self, graph_or_spec: Union[KnowledgeGraph, ProjectSpecification]):
+        if isinstance(graph_or_spec, ProjectSpecification):
+            self.graph = snapshot_to_graph(graph_or_spec)
+        else:
+            self.graph = graph_or_spec
     
     def evaluate_rule(self, rule: IntegrityRule) -> List[RuleViolation]:
         """
