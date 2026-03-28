@@ -165,9 +165,10 @@ class RuleEvaluator:
         rule: IntegrityRule
     ) -> Optional[RuleViolation]:
         """Check minimum outgoing edge count."""
-        edges = self.graph.get_outgoing_edges(node.id, rule.edge_type)
+        # Get ALL outgoing edges, not filtered by type
+        edges = self.graph.get_outgoing_edges(node.id)
         
-        # Filter by target node types
+        # Filter by target node types only
         valid_edges = [
             e for e in edges
             if self._is_valid_target(e.target_id, rule.target_node_types)
@@ -212,9 +213,10 @@ class RuleEvaluator:
         rule: IntegrityRule
     ) -> Optional[RuleViolation]:
         """Check exact outgoing edge count."""
-        edges = self.graph.get_outgoing_edges(node.id, rule.edge_type)
+        # Get ALL outgoing edges, not filtered by type
+        edges = self.graph.get_outgoing_edges(node.id)
         
-        # Filter by target node types
+        # Filter by target node types only
         valid_edges = [
             e for e in edges
             if self._is_valid_target(e.target_id, rule.target_node_types)
@@ -242,9 +244,10 @@ class RuleEvaluator:
         rule: IntegrityRule
     ) -> Optional[RuleViolation]:
         """Check minimum incoming edge count."""
-        edges = self.graph.get_incoming_edges(node.id, rule.edge_type)
+        # Get ALL incoming edges, not filtered by type
+        edges = self.graph.get_incoming_edges(node.id)
         
-        # Filter by source node types
+        # Filter by source node types only
         valid_edges = [
             e for e in edges
             if self._is_valid_source(e.source_id, rule.target_node_types)

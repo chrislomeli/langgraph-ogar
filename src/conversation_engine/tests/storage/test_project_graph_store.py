@@ -52,7 +52,6 @@ def _sample_rules() -> list[IntegrityRule]:
             name="Goal → Requirement",
             description="Every goal must have at least one requirement",
             applies_to_node_type="goal",
-            edge_type="HAS_RULE",
             rule_type="minimum_outgoing_edge_count",
             target_node_types=["requirement"],
             minimum_count=1,

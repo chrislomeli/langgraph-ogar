@@ -36,7 +36,6 @@ class IntegrityRule(BaseNode):
     )
     rule_type: RuleType = Field(..., description="Type of validation check")
 
-    edge_type: EdgeType = Field(..., description="The edge type to check")   # todo - remove this from IntegrityRule
     target_node_types: List[NodeType] = Field(
         ...,
         description="Valid target node types for the edge"

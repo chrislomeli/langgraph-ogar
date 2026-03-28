@@ -151,7 +151,6 @@ rule = IntegrityRule(
     description="Every goal must map to at least one requirement.",
     applies_to_node_type="goal",
     rule_type="minimum_outgoing_edge_count",
-    edge_type="SATISFIED_BY",
     target_node_types=["requirement"],
     minimum_count=1,
     severity="high",
