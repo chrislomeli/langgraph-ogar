@@ -21,7 +21,7 @@ from conversation_engine.storage.project_store import (
 )
 from conversation_engine.storage.graph import KnowledgeGraph
 from conversation_engine.models.rule_node import IntegrityRule
-from conversation_engine.models.query_node import GraphQueryPattern
+# from conversation_engine.models.query_node import GraphQueryPattern
 from conversation_engine.models.validation_quiz import ValidationQuiz
 from conversation_engine.graph.architectural_context import (
     ArchitecturalOntologyContext,
@@ -82,7 +82,7 @@ def _full_config(**overrides) -> DomainConfig:
         project_spec=_sample_spec(),
         rules=_sample_rules(),
         quiz=_sample_quiz(),
-        query_patterns=[],
+        # query_patterns=[],
         system_prompt="You are a test assistant.",
         metadata={"version": "1.0"},
     )
@@ -114,12 +114,12 @@ class TestKnowledgeGraphTransforms:
 
 
 
-        project = project_graph.get_nodes_by_type("project")
-        goals = project_graph.get_nodes_by_type("goal")
-        reqs = project_graph.get_nodes_by_type("requirement")
-        capabilities = project_graph.get_nodes_by_type("capability")
-        components = project_graph.get_nodes_by_type("component")
-        rules = project_graph.get_nodes_by_type("rule")
+        project = project_graph.get_nodes_by_type(NodeType.PROJECT)
+        goals = project_graph.get_nodes_by_type(NodeType.GOAL)
+        reqs = project_graph.get_nodes_by_type(NodeType.REQUIREMENT)
+        capabilities = project_graph.get_nodes_by_type(NodeType.CAPABILITY)
+        components = project_graph.get_nodes_by_type(NodeType.COMPONENT)
+        rules = project_graph.get_nodes_by_type(NodeType.RULE)
 
         assert len(project) == 1
         assert len(goals) == 2

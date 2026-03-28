@@ -18,7 +18,7 @@ from conversation_engine.storage.project_store import (
 )
 from conversation_engine.storage.graph import KnowledgeGraph
 from conversation_engine.models.rule_node import IntegrityRule
-from conversation_engine.models.query_node import GraphQueryPattern
+# from conversation_engine.models.query_node import GraphQueryPattern
 from conversation_engine.models.validation_quiz import ValidationQuiz
 from conversation_engine.graph.architectural_context import (
     ArchitecturalOntologyContext,
@@ -80,7 +80,7 @@ def _full_config(**overrides) -> DomainConfig:
         project_spec=_sample_spec(),
         rules=_sample_rules(),
         quiz=_sample_quiz(),
-        query_patterns=[],
+        # query_patterns=[],
         system_prompt="You are a test assistant.",
         metadata={"version": "1.0"},
     )
@@ -111,7 +111,7 @@ class TestDomainConfig:
         assert cfg.project_spec is None
         assert cfg.rules is None
         assert cfg.quiz is None
-        assert cfg.query_patterns is None
+        # assert cfg.query_patterns is None
         assert cfg.system_prompt is None
         assert cfg.metadata == {}
 

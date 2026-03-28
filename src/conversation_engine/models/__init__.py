@@ -28,14 +28,14 @@ from conversation_engine.models.rule_node import (
     Severity,
     IntegrityRule,
 )
-from conversation_engine.models.query_node import (
-    QueryIntent,
-    OutputKind,
-    EdgeCheck,
-    TraversalSpec,
-    PathStep,
-    GraphQueryPattern,
-)
+# from conversation_engine.models.query_node import (
+#     QueryIntent,
+#     OutputKind,
+#     EdgeCheck,
+#     TraversalSpec,
+#     PathStep,
+#     GraphQueryPattern,
+# )
 from conversation_engine.models.assessment import (
     AssessmentType,
     Assessment,
@@ -69,13 +69,13 @@ __all__ = [
     "ComponentDependencyTrace",
     "RuleType",
     "Severity",
-    "IntegrityRule",
-    "QueryIntent",
-    "OutputKind",
-    "EdgeCheck",
-    "TraversalSpec",
-    "PathStep",
-    "GraphQueryPattern",
+    # "IntegrityRule",
+    # "QueryIntent",
+    # "OutputKind",
+    # "EdgeCheck",
+    # "TraversalSpec",
+    # "PathStep",
+    # "GraphQueryPattern",
     "AssessmentType",
     "Assessment",
 ]

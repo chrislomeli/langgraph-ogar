@@ -20,7 +20,7 @@ from conversation_engine.graph.context import (
 from conversation_engine.models.domain_config import DomainConfig
 from conversation_engine.models.project_spec import ProjectSpecification
 from conversation_engine.models.rule_node import IntegrityRule
-from conversation_engine.models.query_node import GraphQueryPattern
+# from conversation_engine.models.query_node import GraphQueryPattern
 from conversation_engine.storage.graph import KnowledgeGraph
 from conversation_engine.storage.snapshot_facade import snapshot_to_graph
 from conversation_engine.validation.evaluator import RuleEvaluator
@@ -64,14 +64,14 @@ class ArchitecturalOntologyContext:
         else:
             self._graph = KnowledgeGraph()
         self._rules = config.rules or []
-        self._query_patterns = config.query_patterns or []
+        # self._query_patterns = config.query_patterns or []
 
     @classmethod
     def from_components(
         cls,
         graph: KnowledgeGraph,
         rules: List[IntegrityRule],
-        query_patterns: List[GraphQueryPattern] | None = None,
+        # query_patterns: List[GraphQueryPattern] | None = None,
         system_prompt: Optional[str] = None,
         quiz: Optional[List[ValidationQuiz]] = None,
     ) -> "ArchitecturalOntologyContext":
@@ -87,7 +87,7 @@ class ArchitecturalOntologyContext:
             project_name="unnamed",
             project_spec=spec,
             rules=rules,
-            query_patterns=query_patterns,
+            # query_patterns=query_patterns,
             system_prompt=system_prompt,
             quiz=quiz,
         ))
@@ -146,7 +146,7 @@ class ArchitecturalOntologyContext:
         return {
             "graph": self._graph,
             "rules": self._rules,
-            "query_patterns": self._query_patterns,
+            # "query_patterns": self._query_patterns,
         }
 
     # ── Domain-specific accessors (not part of the protocol) ────────
@@ -159,9 +159,9 @@ class ArchitecturalOntologyContext:
     def rules(self) -> List[IntegrityRule]:
         return self._rules
 
-    @property
-    def query_patterns(self) -> List[GraphQueryPattern]:
-        return self._query_patterns
+    # @property
+    # def query_patterns(self) -> List[GraphQueryPattern]:
+    #     return self._query_patterns
 
     @property
     def system_prompt(self) -> str:

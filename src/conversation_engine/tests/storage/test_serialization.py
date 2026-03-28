@@ -18,10 +18,10 @@ from conversation_engine.storage.graph import KnowledgeGraph
 from conversation_engine.storage.file_project_store import FileProjectStore
 from conversation_engine.storage.snapshot_facade import graph_to_snapshot
 from conversation_engine.models.rule_node import IntegrityRule
-from conversation_engine.models.query_node import (
-    GraphQueryPattern,
-    EdgeCheck,
-)
+# from conversation_engine.models.query_node import (
+#     GraphQueryPattern,
+#     EdgeCheck,
+# )
 from conversation_engine.models.validation_quiz import ValidationQuiz
 from conversation_engine.graph.architectural_context import (
     ArchitecturalOntologyContext,
@@ -80,24 +80,24 @@ def _sample_quiz() -> list[ValidationQuiz]:
     ]
 
 
-def _sample_query_patterns() -> list[GraphQueryPattern]:
-    return [
-        GraphQueryPattern(
-            id="qp-1",
-            name="Goal gap check",
-            description="Find goals without requirements",
-            subject_node_type="goal",
-            query_intent="gap_detection",
-            checks=[
-                EdgeCheck(
-                    edge_type="SATISFIED_BY",
-                    target_node_types=["requirement"],
-                    expected_min_count=1,
-                ),
-            ],
-            output_kind="finding_set",
-        ),
-    ]
+# def _sample_query_patterns() -> list[GraphQueryPattern]:
+#     return [
+#         GraphQueryPattern(
+#             id="qp-1",
+#             name="Goal gap check",
+#             description="Find goals without requirements",
+#             subject_node_type="goal",
+#             query_intent="gap_detection",
+#             checks=[
+#                 EdgeCheck(
+#                     edge_type="SATISFIED_BY",
+#                     target_node_types=["requirement"],
+#                     expected_min_count=1,
+#                 ),
+#             ],
+#             output_kind="finding_set",
+#         ),
+#     ]
 
 
 def _sample_spec() -> ProjectSpecification:
@@ -110,7 +110,7 @@ def _full_config() -> DomainConfig:
         project_spec=_sample_spec(),
         rules=_sample_rules(),
         quiz=_sample_quiz(),
-        query_patterns=_sample_query_patterns(),
+        # query_patterns=_sample_query_patterns(),
         system_prompt="You are a test assistant.",
         metadata={"version": "1.0", "owner": "test"},
     )
@@ -204,8 +204,8 @@ class TestDomainConfigSerialization:
         assert restored.quiz[0].prohibited_concepts == ["hallucination"]
         assert restored.quiz[0].weight == 2.0
         assert restored.quiz[0].min_score == 0.6
-        assert len(restored.query_patterns) == 1
-        assert restored.query_patterns[0].id == "qp-1"
+        # assert len(restored.query_patterns) == 1
+        # assert restored.query_patterns[0].id == "qp-1"
         assert restored.system_prompt == "You are a test assistant."
         assert restored.metadata == {"version": "1.0", "owner": "test"}
 
@@ -217,7 +217,7 @@ class TestDomainConfigSerialization:
         assert restored.project_spec is None
         assert restored.rules is None
         assert restored.quiz is None
-        assert restored.query_patterns is None
+        # assert restored.query_patterns is None
         assert restored.system_prompt is None
         assert restored.metadata == {}
 

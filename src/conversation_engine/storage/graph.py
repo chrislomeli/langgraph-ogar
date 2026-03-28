@@ -28,7 +28,7 @@ from conversation_engine.models.nodes import (
 )
 from conversation_engine.models.rule_node import IntegrityRule
 from conversation_engine.models.validation_quiz import ValidationQuiz
-from conversation_engine.models.query_node import GraphQueryPattern
+# from conversation_engine.models.query_node import GraphQueryPattern
 
 
 T = TypeVar('T', bound=BaseNode)
@@ -51,7 +51,7 @@ _NODE_TYPE_REGISTRY: Dict[NodeType, type[BaseNode]] = {
     NodeType.PROJECT: Project,
     NodeType.RULE: IntegrityRule,
     NodeType.QUIZ: ValidationQuiz,
-    NodeType.QUERY_PATTERN: GraphQueryPattern,
+    # NodeType.QUERY_PATTERN: GraphQueryPattern,
 }
 
 
@@ -87,9 +87,6 @@ class KnowledgeGraph:
         
         # Edge type index: edge_type -> list of edges
         self._edge_type_index: Dict[EdgeType, List[BaseEdge]] = defaultdict(list)
-        
-        # Node type index: node_type -> set of node_ids
-        self._node_type_index: Dict[NodeType, Set[str]] = defaultdict(set)
     
     # ── Node Operations ──────────────────────────────────────────────
     
@@ -103,20 +100,8 @@ class KnowledgeGraph:
         Args:
             node: The node to add
         """
-        node_id = node.id
-        
-        # Remove old node from type index if it exists
-        if node_id in self._nodes:
-            old_node = self._nodes[node_id]
-            old_type = self._get_node_type(old_node)
-            self._node_type_index[old_type].discard(node_id)
-        
-        # Add new node
-        self._nodes[node_id] = node
-        
-        # Update type index
-        node_type = self._get_node_type(node)
-        self._node_type_index[node_type].add(node_id)
+        # Simply add/replace the node - no index maintenance needed
+        self._nodes[node.id] = node
     
     def get_node(self, node_id: str) -> Optional[BaseNode]:
         """
@@ -174,12 +159,8 @@ class KnowledgeGraph:
                 "Use remove_node_cascade() to remove edges automatically."
             )
         
-        node = self._nodes[node_id]
-        node_type = self._get_node_type(node)
-        
-        # Remove from storage and indexes
+        # Remove from storage - no index maintenance needed
         del self._nodes[node_id]
-        self._node_type_index[node_type].discard(node_id)
         
         return True
     
@@ -208,7 +189,7 @@ class KnowledgeGraph:
     
     def get_nodes_by_type(self, node_type: NodeType) -> List[BaseNode]:
         """
-        Get all nodes of a specific type.
+        Get all nodes of a specific type using enum traversal.
         
         Args:
             node_type: The node type to filter by
@@ -216,8 +197,7 @@ class KnowledgeGraph:
         Returns:
             List of nodes of the specified type
         """
-        node_ids = self._node_type_index.get(node_type, set())
-        return [self._nodes[nid] for nid in node_ids]
+        return [node for node in self._nodes.values() if node.node_type == node_type]
     
     def get_all_nodes(self) -> List[BaseNode]:
         """Get all nodes in the graph."""

@@ -24,7 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from conversation_engine.models.query_node import GraphQueryPattern
+# from conversation_engine.models.query_node import GraphQueryPattern
 from conversation_engine.models.rule_node import IntegrityRule
 from conversation_engine.models.validation_quiz import ValidationQuiz
 from conversation_engine.models.project_spec import ProjectSpecification
@@ -51,7 +51,7 @@ class ControlSet:
     project_name: str
     rules: Optional[List[IntegrityRule]] = None
     quiz: Optional[List[ValidationQuiz]] = None
-    query_patterns: Optional[List[GraphQueryPattern]] = None
+    # query_patterns: Optional[List[GraphQueryPattern]] = None
     system_prompt: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -79,7 +79,7 @@ class DomainConfig:
     project_spec: Optional[ProjectSpecification] = None
     rules: Optional[List[IntegrityRule]] = None
     quiz: Optional[List[ValidationQuiz]] = None
-    query_patterns: Optional[List[GraphQueryPattern]] = None
+    # query_patterns: Optional[List[GraphQueryPattern]] = None
     system_prompt: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -92,7 +92,7 @@ class DomainConfig:
             project_spec=self.project_spec,
             rules=self.rules,
             quiz=self.quiz,
-            query_patterns=self.query_patterns,
+            # query_patterns=self.query_patterns,
             system_prompt=self.system_prompt,
             metadata=self.metadata,
         )
@@ -122,11 +122,11 @@ class DomainConfig:
                 if self.quiz is not None
                 else None
             ),
-            "query_patterns": (
-                [p.model_dump() for p in self.query_patterns]
-                if self.query_patterns is not None
-                else None
-            ),
+            # "query_patterns": (
+            #     [p.model_dump() for p in self.query_patterns]
+            #     if self.query_patterns is not None
+            #     else None
+            # ),
             "system_prompt": self.system_prompt,
             "metadata": self.metadata,
         }
@@ -139,7 +139,7 @@ class DomainConfig:
         spec_data = data.get("project_spec")
         rules_data = data.get("rules")
         quiz_data = data.get("quiz")
-        patterns_data = data.get("query_patterns")
+        # patterns_data = data.get("query_patterns")
 
         return cls(
             project_name=data["project_name"],
@@ -158,11 +158,11 @@ class DomainConfig:
                 if quiz_data is not None
                 else None
             ),
-            query_patterns=(
-                [GraphQueryPattern.model_validate(p) for p in patterns_data]
-                if patterns_data is not None
-                else None
-            ),
+            # query_patterns=(
+            #     [GraphQueryPattern.model_validate(p) for p in patterns_data]
+            #     if patterns_data is not None
+            #     else None
+            # ),
             system_prompt=data.get("system_prompt"),
             metadata=data.get("metadata", {}),
         )

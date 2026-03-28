@@ -130,7 +130,7 @@ def _update_project(
         project_spec=snapshot,
         rules=existing.rules,
         quiz=existing.quiz,
-        query_patterns=existing.query_patterns,
+        # query_patterns=existing.query_patterns,
         system_prompt=existing.system_prompt,
         metadata=existing.metadata,
     )

@@ -12,7 +12,7 @@ from conversation_engine.models import (
     Capability,
     Component,
     IntegrityRule,
-    GraphQueryPattern,
+    # GraphQueryPattern,
     Assessment,
     GoalRequirementTrace,
 )
