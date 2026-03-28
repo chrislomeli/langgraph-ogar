@@ -67,9 +67,7 @@ def project_to_graph(project: DomainConfig) -> KnowledgeGraph:
     # todo - we need to add these and create a top level node?
     rules = project.rules
     quiz= project.quiz
-    # query_patterns = project.query_patterns
-    system_prompt= project.system_prompt
-    metadata=project.metadata
+
 
 
     # 1. Add the root Project node

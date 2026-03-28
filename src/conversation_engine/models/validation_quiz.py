@@ -7,31 +7,35 @@ zero infrastructure dependencies.  The infrastructure layer
 """
 from __future__ import annotations
 
-from typing import List
 from pydantic import Field
+from typing import Literal, Annotated, Union
+
 
 from conversation_engine.models import BaseNode, NodeType
+from enum import Enum
+
+class QuizType(str, Enum):
+    REASONING = "reasoning"   # evaluated by LLM judge using rubric
+    FACTUAL = "factual"       # evaluated by exact or near-exact match
 
 
-class ValidationQuiz(BaseNode):
-    """
-    A single quiz question for LLM pre-run validation.
-
-    Attributes:
-        id: Unique identifier for this quiz question.
-        name: Human-readable name for this quiz question.
-        question: The question to ask the LLM.
-        required_concepts: Keywords/phrases that MUST appear in the response
-                          (case-insensitive). Each found concept scores equally.
-        prohibited_concepts: Keywords/phrases that must NOT appear (hallucination
-                            detection). Each found concept penalizes the score.
-        weight: Relative weight of this question in the overall score.
-        min_score: Minimum fraction of required_concepts that must be present
-                  for this question to pass (0.0–1.0). Default 0.5.
-    """
+class ReasoningQuiz(BaseNode):
     node_type: NodeType = Field(NodeType.QUIZ, description="Type of this node")
+    quiz_type: Literal[QuizType.REASONING] = QuizType.REASONING
     question: str
-    required_concepts: List[str]
-    prohibited_concepts: List[str] = []
+    evaluation_criteria: str  # required, not Optional
     weight: float = 1.0
     min_score: float = 0.5
+
+class FactualQuiz(BaseNode):
+    node_type: NodeType = Field(NodeType.QUIZ, description="Type of this node")
+    quiz_type: Literal[QuizType.FACTUAL] = QuizType.FACTUAL
+    question: str
+    expected_answer: str   # required, not Optional
+    weight: float = 1.0
+    min_score: float = 0.5
+
+ValidationQuiz = Annotated[
+    Union[ReasoningQuiz, FactualQuiz],
+    Field(discriminator="quiz_type")
+]

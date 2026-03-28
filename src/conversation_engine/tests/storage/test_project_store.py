@@ -19,7 +19,7 @@ from conversation_engine.storage.project_store import (
 from conversation_engine.storage.graph import KnowledgeGraph
 from conversation_engine.models.rule_node import IntegrityRule
 # from conversation_engine.models.query_node import GraphQueryPattern
-from conversation_engine.models.validation_quiz import ValidationQuiz
+from conversation_engine.models.validation_quiz import ValidationQuiz, FactualQuiz
 from conversation_engine.graph.architectural_context import (
     ArchitecturalOntologyContext,
 )
@@ -59,11 +59,11 @@ def _sample_rules() -> list[IntegrityRule]:
     ]
 
 
-def _sample_quiz() -> list[ValidationQuiz]:
+def _sample_quiz() -> list[FactualQuiz]:
     return [
-        ValidationQuiz(
+        FactualQuiz(
             question="What node types exist?",
-            required_concepts=["goal", "requirement"],
+            expected_answer="goal, requirement",
             weight=1.0,
             min_score=0.5,
         ),
@@ -257,9 +257,9 @@ class TestArchitecturalContextFromConfig:
 
     def test_custom_quiz_overrides_default(self):
         custom_quiz = [
-            ValidationQuiz(
+            FactualQuiz(
                 question="Custom question?",
-                required_concepts=["custom"],
+                expected_answer="custom",
             ),
         ]
         cfg = DomainConfig(project_name="custom", quiz=custom_quiz)

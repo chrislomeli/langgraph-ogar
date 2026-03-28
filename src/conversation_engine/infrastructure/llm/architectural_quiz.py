@@ -13,7 +13,7 @@ conversation loop would use when the reason node calls the LLM.
 
 from __future__ import annotations
 
-from conversation_engine.models.validation_quiz import ValidationQuiz
+from conversation_engine.models.validation_quiz import FactualQuiz
 
 
 # ── System prompt ───────────────────────────────────────────────────
@@ -75,118 +75,95 @@ on what changes would resolve the integrity violations.
 
 # ── Quiz questions ──────────────────────────────────────────────────
 
-ARCHITECTURAL_QUIZ: list[ValidationQuiz] = [
+ARCHITECTURAL_QUIZ: list[FactualQuiz] = [
 
     # Q1: Node types
-    ValidationQuiz(
+    FactualQuiz(
         id="quiz-node-types",
         name="Node Types Quiz",
         question=(
             "What are the main node types in the knowledge graph? "
             "List as many as you can."
         ),
-        required_concepts=[
-            "goal", "requirement", "capability", "component",
-            "dependency", "feature",
-        ],
+        expected_answer="goal, requirement, capability, component, dependency, feature",
         weight=1.0,
         min_score=0.5,
     ),
 
     # Q2: Edge types and traceability
-    ValidationQuiz(
+    FactualQuiz(
         id="quiz-edge-traceability",
         name="Edge Types and Traceability Quiz",
         question=(
             "How does traceability work in this knowledge graph? "
             "Describe the chain from goals to components."
         ),
-        required_concepts=[
-            "goal", "requirement", "capability", "component",
-            "satisfied_by", "realized_by",
-        ],
+        expected_answer="goal, requirement, capability, component, satisfied_by, realized_by",
         weight=1.5,
         min_score=0.5,
     ),
 
     # Q3: Integrity rules
-    ValidationQuiz(
+    FactualQuiz(
         id="quiz-integrity-rules",
         name="Integrity Rules Quiz",
         question=(
             "What are the integrity rules? What happens when a goal "
             "has no requirements?"
         ),
-        required_concepts=[
-            "goal", "requirement", "violation", "finding",
-        ],
-        prohibited_concepts=[
-            "delete the goal", "remove the goal",
-        ],
+        expected_answer="goal, requirement, violation, finding",
         weight=1.5,
         min_score=0.5,
     ),
 
     # Q4: Findings and severity
-    ValidationQuiz(
+    FactualQuiz(
         id="quiz-findings",
         name="Findings and Severity Quiz",
         question=(
             "What is a 'finding' in this system? What information "
             "does a finding contain?"
         ),
-        required_concepts=[
-            "severity", "subject", "message",
-        ],
+        expected_answer="severity, subject, message",
         weight=1.0,
         min_score=0.5,
     ),
 
     # Q5: Role understanding
-    ValidationQuiz(
+    FactualQuiz(
         id="quiz-role",
         name="Role Understanding Quiz",
         question=(
             "What is your role in the conversation loop? "
             "Do you modify the knowledge graph directly?"
         ),
-        required_concepts=[
-            "advise", "suggest",
-        ],
-        prohibited_concepts=[
-            "i modify the graph", "i update the graph",
-            "i change the graph", "i delete",
-        ],
+        expected_answer="advise, suggest",
         weight=1.5,
         min_score=0.5,
     ),
 
     # Q6: Prioritization
-    ValidationQuiz(
+    FactualQuiz(
         id="quiz-prioritization",
         name="Prioritization Quiz",
         question=(
             "If there are 3 findings — one high severity, one medium, "
             "and one low — in what order should you address them?"
         ),
-        required_concepts=[
-            "high", "medium", "low",
-        ],
+        expected_answer="high, medium, low",
         weight=0.5,
         min_score=0.5,
     ),
 
     # Q7: Edge case — no findings
-    ValidationQuiz(
+    FactualQuiz(
         id="quiz-no-findings",
         name="No Findings Quiz",
         question=(
             "What should you tell the user if the validation pass "
             "produces zero findings?"
         ),
-        required_concepts=[
-            "complete", "pass",
-        ],
+        expected_answer="complete, pass",
         weight=0.5,
         min_score=0.5,
     ),

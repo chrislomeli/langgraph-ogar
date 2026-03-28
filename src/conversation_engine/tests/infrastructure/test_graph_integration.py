@@ -33,9 +33,9 @@ from conversation_engine.infrastructure.llm import (
     CallLLM,
     LLMRequest,
     LLMResponse,
-    ValidationQuiz,
     call_llm_stub,
 )
+from conversation_engine.models.validation_quiz import FactualQuiz
 
 
 # ── Fake contexts ───────────────────────────────────────────────────
@@ -134,9 +134,9 @@ class _PreflightContext:
     @property
     def preflight_quiz(self) -> list:
         return [
-            ValidationQuiz(
+            FactualQuiz(
                 question="What node types exist?",
-                required_concepts=["goal", "requirement"],
+                expected_answer="goal, requirement",
                 weight=1.0,
             ),
         ]
@@ -381,9 +381,9 @@ class TestPreflightNode:
             @property
             def preflight_quiz(self) -> list:
                 return [
-                    ValidationQuiz(
+                    FactualQuiz(
                         question="What types?",
-                        required_concepts=["goal", "requirement"],
+                        expected_answer="goal, requirement",
                         weight=1.0,
                     ),
                 ]

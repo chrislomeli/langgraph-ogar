@@ -22,7 +22,7 @@ from conversation_engine.models.rule_node import IntegrityRule
 #     GraphQueryPattern,
 #     EdgeCheck,
 # )
-from conversation_engine.models.validation_quiz import ValidationQuiz
+from conversation_engine.models.validation_quiz import FactualQuiz
 from conversation_engine.graph.architectural_context import (
     ArchitecturalOntologyContext,
 )
@@ -66,14 +66,13 @@ def _sample_rules() -> list[IntegrityRule]:
     ]
 
 
-def _sample_quiz() -> list[ValidationQuiz]:
+def _sample_quiz() -> list[FactualQuiz]:
     return [
-        ValidationQuiz(
+        FactualQuiz(
             id="test-quiz-node-types",
             name="Test Node Types Quiz",
             question="What node types exist?",
-            required_concepts=["goal", "requirement"],
-            prohibited_concepts=["hallucination"],
+            expected_answer="goal, requirement",
             weight=2.0,
             min_score=0.6,
         ),
@@ -201,7 +200,7 @@ class TestDomainConfigSerialization:
         assert restored.rules[0].id == "rule-goal-req"
         assert len(restored.quiz) == 1
         assert restored.quiz[0].question == "What node types exist?"
-        assert restored.quiz[0].prohibited_concepts == ["hallucination"]
+        assert restored.quiz[0].expected_answer == "goal, requirement"
         assert restored.quiz[0].weight == 2.0
         assert restored.quiz[0].min_score == 0.6
         # assert len(restored.query_patterns) == 1

@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Optional
 
 # from conversation_engine.models.query_node import GraphQueryPattern
 from conversation_engine.models.rule_node import IntegrityRule
-from conversation_engine.models.validation_quiz import ValidationQuiz
+from conversation_engine.models.validation_quiz import ValidationQuiz, FactualQuiz, ReasoningQuiz
 from conversation_engine.models.project_spec import ProjectSpecification
 
 @dataclass(frozen=True)
@@ -171,24 +171,52 @@ class DomainConfig:
 # ── ValidationQuiz dict helpers (dataclass, not Pydantic) ────────────
 
 def _quiz_to_dict(q: ValidationQuiz) -> Dict[str, Any]:
-    return {
+    base_dict = {
         "id": q.id,
         "name": q.name,
         "question": q.question,
-        "required_concepts": list(q.required_concepts),
-        "prohibited_concepts": list(q.prohibited_concepts),
         "weight": q.weight,
         "min_score": q.min_score,
+        "quiz_type": q.quiz_type,
     }
+    
+    if q.quiz_type == "factual":
+        base_dict["expected_answer"] = q.expected_answer
+    elif q.quiz_type == "reasoning":
+        base_dict["evaluation_criteria"] = q.evaluation_criteria
+    
+    return base_dict
 
 
 def _quiz_from_dict(d: Dict[str, Any]) -> ValidationQuiz:
-    return ValidationQuiz(
-        id=d["id"],
-        name=d["name"],
-        question=d["question"],
-        required_concepts=d["required_concepts"],
-        prohibited_concepts=d.get("prohibited_concepts", []),
-        weight=d.get("weight", 1.0),
-        min_score=d.get("min_score", 0.5),
-    )
+    quiz_type = d.get("quiz_type", "factual")  # Default to factual for backward compatibility
+    
+    base_kwargs = {
+        "id": d["id"],
+        "name": d["name"],
+        "question": d["question"],
+        "weight": d.get("weight", 1.0),
+        "min_score": d.get("min_score", 0.5),
+    }
+    
+    if quiz_type == "factual":
+        # Handle new format or backward compatibility
+        if "expected_answer" in d:
+            base_kwargs["expected_answer"] = d["expected_answer"]
+        elif "required_concepts" in d:
+            # Backward compatibility: convert list to string
+            base_kwargs["expected_answer"] = ", ".join(d["required_concepts"])
+        else:
+            base_kwargs["expected_answer"] = ""
+        return FactualQuiz(**base_kwargs)
+    elif quiz_type == "reasoning":
+        if "evaluation_criteria" in d:
+            base_kwargs["evaluation_criteria"] = d["evaluation_criteria"]
+        elif "required_concepts" in d:
+            # Backward compatibility: convert list to string
+            base_kwargs["evaluation_criteria"] = ", ".join(d["required_concepts"])
+        else:
+            base_kwargs["evaluation_criteria"] = ""
+        return ReasoningQuiz(**base_kwargs)
+    else:
+        raise ValueError(f"Unknown quiz_type: {quiz_type}")

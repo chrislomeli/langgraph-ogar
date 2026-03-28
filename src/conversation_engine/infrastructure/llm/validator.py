@@ -17,10 +17,11 @@ Usage:
     )
 
     quiz = [
-        ValidationQuiz(
+        FactualQuiz(
             question="What node types exist in the knowledge graph?",
-            required_concepts=["goal", "requirement", "capability", "component"],
+            expected_answer="goal, requirement, capability, component",
             weight=1.0,
+            min_score=0.5,
         ),
     ]
     validator = LLMValidator(llm=my_llm, system_prompt=SYSTEM_PROMPT, quiz=quiz)
@@ -41,7 +42,7 @@ from conversation_engine.infrastructure.llm.protocols import (
     LLMRequest,
     LLMResponse,
 )
-from conversation_engine.models.validation_quiz import ValidationQuiz
+from conversation_engine.models.validation_quiz import ValidationQuiz, FactualQuiz
 
 
 # ── Per-question result ─────────────────────────────────────────────
@@ -82,15 +83,28 @@ def _score_response(
     Score a single LLM response against its quiz question.
 
     Scoring:
+      - For FactualQuiz: check if expected_answer concepts are found
+      - For ReasoningQuiz: check if evaluation_criteria concepts are found
       - Each required concept found: +1 point
-      - Each prohibited concept found: -1 point (clamped to 0)
       - Final score = (points) / len(required_concepts)
     """
     text_lower = response_text.lower()
 
+    # Handle different quiz types
+    if quiz.quiz_type == "factual":
+        # For FactualQuiz, split expected_answer into concepts
+        required_concepts = [c.strip() for c in quiz.expected_answer.split(',') if c.strip()]
+        prohibited_concepts = []  # FactualQuiz doesn't have prohibited concepts
+    elif quiz.quiz_type == "reasoning":
+        # For ReasoningQuiz, split evaluation_criteria into concepts  
+        required_concepts = [c.strip() for c in quiz.evaluation_criteria.split(',') if c.strip()]
+        prohibited_concepts = []  # ReasoningQuiz doesn't have prohibited concepts in the new structure
+    else:
+        raise ValueError(f"Unknown quiz type: {quiz.quiz_type}")
+
     found = []
     missing = []
-    for concept in quiz.required_concepts:
+    for concept in required_concepts:
         # Use word-boundary-aware search for short concepts
         pattern = re.compile(r'\b' + re.escape(concept.lower()) + r'\b')
         if pattern.search(text_lower):
@@ -99,17 +113,17 @@ def _score_response(
             missing.append(concept)
 
     prohibited_found = []
-    for concept in quiz.prohibited_concepts:
+    for concept in prohibited_concepts:
         pattern = re.compile(r'\b' + re.escape(concept.lower()) + r'\b')
         if pattern.search(text_lower):
             prohibited_found.append(concept)
 
     # Calculate score
-    if not quiz.required_concepts:
+    if not required_concepts:
         raw_score = 1.0 if not prohibited_found else 0.0
     else:
         points = len(found) - len(prohibited_found)
-        raw_score = max(0.0, points / len(quiz.required_concepts))
+        raw_score = max(0.0, points / len(required_concepts))
 
     score = min(1.0, raw_score)
     passed = score >= quiz.min_score
@@ -177,11 +191,19 @@ class LLMValidator:
 
             if not response.success:
                 # LLM call itself failed — automatic zero
+                # Get concepts based on quiz type
+                if q.quiz_type == "factual":
+                    concepts = [c.strip() for c in q.expected_answer.split(',') if c.strip()]
+                elif q.quiz_type == "reasoning":
+                    concepts = [c.strip() for c in q.evaluation_criteria.split(',') if c.strip()]
+                else:
+                    concepts = []
+                
                 results.append(QuizResult(
                     question=q.question,
                     response=response.error or "(LLM call failed)",
                     found_concepts=[],
-                    missing_concepts=q.required_concepts[:],
+                    missing_concepts=concepts,
                     prohibited_found=[],
                     score=0.0,
                     passed=False,

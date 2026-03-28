@@ -19,7 +19,7 @@ from conversation_engine.infrastructure.llm.protocols import (
 from conversation_engine.infrastructure.llm.validator import (
     LLMValidator,
     LLMValidatorReport,
-    ValidationQuiz,
+    FactualQuiz,
     QuizResult,
     _score_response,
     quiz_report_summary,
@@ -35,9 +35,9 @@ from conversation_engine.infrastructure.llm.architectural_quiz import (
 class TestScoreResponse:
 
     def test_all_concepts_found(self):
-        quiz = ValidationQuiz(
+        quiz = FactualQuiz(
             question="What colors?",
-            required_concepts=["red", "blue", "green"],
+            expected_answer="red, blue, green",
         )
         result = _score_response("I see red, blue, and green.", quiz)
         assert result.score == 1.0
@@ -45,9 +45,9 @@ class TestScoreResponse:
         assert result.missing_concepts == []
 
     def test_partial_concepts(self):
-        quiz = ValidationQuiz(
+        quiz = FactualQuiz(
             question="What colors?",
-            required_concepts=["red", "blue", "green", "yellow"],
+            expected_answer="red, blue, green, yellow",
             min_score=0.5,
         )
         result = _score_response("I see red and blue.", quiz)
@@ -56,53 +56,56 @@ class TestScoreResponse:
         assert set(result.missing_concepts) == {"green", "yellow"}
 
     def test_no_concepts_found(self):
-        quiz = ValidationQuiz(
+        quiz = FactualQuiz(
             question="What colors?",
-            required_concepts=["red", "blue"],
+            expected_answer="red, blue",
         )
         result = _score_response("I don't know anything about this.", quiz)
         assert result.score == 0.0
         assert not result.passed
 
-    def test_prohibited_concepts_penalize(self):
-        quiz = ValidationQuiz(
-            question="What is your role?",
-            required_concepts=["advise", "suggest"],
-            prohibited_concepts=["i modify the graph"],
-        )
-        result = _score_response(
-            "I advise and suggest changes. I modify the graph directly.",
-            quiz,
-        )
-        # Found 2, prohibited 1 → (2-1)/2 = 0.5
-        assert result.score == 0.5
-        assert "i modify the graph" in result.prohibited_found
+    # NOTE: prohibited_concepts feature removed in new quiz structure
+    # def test_prohibited_concepts_penalize(self):
+    #     quiz = ValidationQuiz(
+    #         question="What is your role?",
+    #         evaluation_criteria=["advise", "suggest"],
+    #         prohibited_concepts=["i modify the graph"],
+    #     )
+    #     result = _score_response(
+    #         "I advise and suggest changes. I modify the graph directly.",
+    #         quiz,
+    #     )
+    #     # Found 2, prohibited 1 → (2-1)/2 = 0.5
+    #     assert result.score == 0.5
+    #     assert "i modify the graph" in result.prohibited_found
 
-    def test_prohibited_only(self):
-        quiz = ValidationQuiz(
-            question="Tell me about yourself.",
-            required_concepts=[],
-            prohibited_concepts=["i am sentient"],
-        )
-        # No prohibited found → perfect
-        result = _score_response("I am an AI assistant.", quiz)
-        assert result.score == 1.0
-        assert result.passed
+    # NOTE: prohibited_concepts feature removed in new quiz structure
+    # def test_prohibited_only(self):
+    #     quiz = ValidationQuiz(
+    #         question="Tell me about yourself.",
+    #         evaluation_criteria=[],
+    #         prohibited_concepts=["i am sentient"],
+    #     )
+    #     # No prohibited found → perfect
+    #     result = _score_response("I am an AI assistant.", quiz)
+    #     assert result.score == 1.0
+    #     assert result.passed
 
-    def test_prohibited_found_no_required(self):
-        quiz = ValidationQuiz(
-            question="Tell me about yourself.",
-            required_concepts=[],
-            prohibited_concepts=["i am sentient"],
-        )
-        result = _score_response("I am sentient and self-aware.", quiz)
-        assert result.score == 0.0
-        assert not result.passed
+    # NOTE: prohibited_concepts feature removed in new quiz structure
+    # def test_prohibited_found_no_required(self):
+    #     quiz = ValidationQuiz(
+    #         question="Tell me about yourself.",
+    #         evaluation_criteria=[],
+    #         prohibited_concepts=["i am sentient"],
+    #     )
+    #     result = _score_response("I am sentient and self-aware.", quiz)
+    #     assert result.score == 0.0
+    #     assert not result.passed
 
     def test_case_insensitive(self):
-        quiz = ValidationQuiz(
+        quiz = FactualQuiz(
             question="What types?",
-            required_concepts=["Goal", "Requirement"],
+            expected_answer="Goal, Requirement",
         )
         result = _score_response("We have GOAL and requirement types.", quiz)
         assert result.score == 1.0
@@ -110,9 +113,9 @@ class TestScoreResponse:
     def test_word_boundary_matching(self):
         """'goal' should not match 'goals' at word boundary... but actually
         regex \\bgoal\\b won't match 'goals'. Let's verify."""
-        quiz = ValidationQuiz(
+        quiz = FactualQuiz(
             question="What?",
-            required_concepts=["goal"],
+            expected_answer="goal",
         )
         # "goals" should NOT match "goal" with word boundaries
         result = _score_response("We have many goals here.", quiz)
@@ -123,9 +126,9 @@ class TestScoreResponse:
         assert result.score == 0.0
 
     def test_min_score_threshold(self):
-        quiz = ValidationQuiz(
+        quiz = FactualQuiz(
             question="What?",
-            required_concepts=["a", "b", "c", "d"],
+            expected_answer="a, b, c, d",
             min_score=0.75,
         )
         # 2 out of 4 = 0.5 < 0.75 → fail
@@ -183,16 +186,16 @@ def _partial_llm(request: LLMRequest) -> LLMResponse:
 
 class TestLLMValidator:
 
-    def _simple_quiz(self) -> list[ValidationQuiz]:
+    def _simple_quiz(self) -> list[FactualQuiz]:
         return [
-            ValidationQuiz(
+            FactualQuiz(
                 question="What are node types?",
-                required_concepts=["goal", "requirement"],
+                expected_answer="goal, requirement",
                 weight=1.0,
             ),
-            ValidationQuiz(
+            FactualQuiz(
                 question="What is your role?",
-                required_concepts=["advise"],
+                expected_answer="advise",
                 weight=1.0,
             ),
         ]
@@ -240,14 +243,14 @@ class TestLLMValidator:
 
     def test_weighted_scoring(self):
         quiz = [
-            ValidationQuiz(
+            FactualQuiz(
                 question="Easy question",
-                required_concepts=["pizza"],
+                expected_answer="pizza",
                 weight=1.0,
             ),
-            ValidationQuiz(
+            FactualQuiz(
                 question="Hard question",
-                required_concepts=["quantum", "entanglement"],
+                expected_answer="quantum, entanglement",
                 weight=3.0,  # 3x weight
             ),
         ]
@@ -266,9 +269,9 @@ class TestLLMValidator:
 
     def test_threshold_edge(self):
         quiz = [
-            ValidationQuiz(
+            FactualQuiz(
                 question="Q1",
-                required_concepts=["pizza"],
+                expected_answer="pizza",
                 weight=1.0,
             ),
         ]
@@ -287,7 +290,7 @@ class TestLLMValidator:
         validator = LLMValidator(
             llm=_smart_llm,
             system_prompt="Hello world",
-            quiz=[ValidationQuiz(question="Q1", required_concepts=["hello"])],
+            quiz=[FactualQuiz(question="Q1", expected_answer="hello")],
         )
         report = validator.run()
         assert len(report.llm_responses) == 1
@@ -353,7 +356,14 @@ class TestArchitecturalQuiz:
         """The architectural quiz should cover key domain concepts."""
         all_required = set()
         for q in ARCHITECTURAL_QUIZ:
-            all_required.update(c.lower() for c in q.required_concepts)
+            # For FactualQuiz, check expected_answer
+            if hasattr(q, 'expected_answer'):
+                concepts = [c.strip().lower() for c in q.expected_answer.split(',')]
+                all_required.update(concepts)
+            # For ReasoningQuiz, check evaluation_criteria (if any exist)
+            elif hasattr(q, 'evaluation_criteria'):
+                concepts = [c.strip().lower() for c in q.evaluation_criteria.split(',')]
+                all_required.update(concepts)
 
         # Must test for core node types
         assert "goal" in all_required
@@ -368,10 +378,11 @@ class TestArchitecturalQuiz:
         assert "severity" in all_required
         assert "finding" in all_required or "message" in all_required
 
-    def test_quiz_has_prohibited_concepts(self):
-        """At least one question should check for prohibited behavior."""
-        has_prohibited = any(q.prohibited_concepts for q in ARCHITECTURAL_QUIZ)
-        assert has_prohibited, "Quiz should include hallucination detection"
+    # NOTE: prohibited_concepts feature removed in new quiz structure
+    # def test_quiz_has_prohibited_concepts(self):
+    #     """At least one question should check for prohibited behavior."""
+    #     has_prohibited = any(q.prohibited_concepts for q in ARCHITECTURAL_QUIZ)
+    #     assert has_prohibited, "Quiz should include hallucination detection"
 
 
 # ── Report formatting tests ────────────────────────────────────────
