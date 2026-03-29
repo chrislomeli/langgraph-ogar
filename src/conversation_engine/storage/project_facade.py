@@ -64,11 +64,7 @@ def _get_quiz_edge_type(quiz_type: str) -> EdgeType:
 
 def project_to_graph(project: DomainConfig) -> KnowledgeGraph:
     graph = KnowledgeGraph()
-    project_spec = project.project_spec
 
-    # todo - we need to add these and create a top level node?
-    rules = project.rules
-    quiz= project.quiz
 
     # 1. Add the root Project node
     project_id = _create_id("project")
@@ -76,7 +72,7 @@ def project_to_graph(project: DomainConfig) -> KnowledgeGraph:
         id=project_id, # _slugify("project", project.project_name),
         name=project.project_name,
         system_prompt=project.system_prompt or "",
-        metadata=json.dumps(project.metadata),
+        metadata=json.dumps(project.metadata) or ""
     )
     graph.add_node(project_node)
 
@@ -89,7 +85,7 @@ def project_to_graph(project: DomainConfig) -> KnowledgeGraph:
     dep_ids: Dict[str, str] = {}
 
     # ── rules ──────────────────────────────────────────────────────
-    for spec in project.rules:
+    for spec in project.rules or []:
         nid = _create_id("rule")
         # Create a copy with the new ID
         rule_with_id = spec.model_copy(update={"id": nid})
@@ -102,7 +98,7 @@ def project_to_graph(project: DomainConfig) -> KnowledgeGraph:
 
 
     # ── Quiz ──────────────────────────────────────────────────────
-    for spec in project.quiz:
+    for spec in project.quiz or []:
         quiz_type = spec.quiz_type
         edge_type = "HAS_FACTUAL_QUIZ"
         if quiz_type.startswith("reason"):
@@ -117,147 +113,150 @@ def project_to_graph(project: DomainConfig) -> KnowledgeGraph:
             target_id=nid,
         ))
 
-
-    # ── Goals ──────────────────────────────────────────────────────
-    for spec in project_spec.goals:
-        nid = _create_id("goal")
-        goal_ids[spec.name] = nid
-        graph.add_node(Goal(id=nid, name=spec.name, statement=spec.statement))
-        # Wire: wire to project
-        graph.add_edge(BaseEdge(
-            edge_type="HAS_GOAL",
-            source_id=project_id,
-            target_id=nid,
-        ))
-
-    # ── Requirements (→ Goal via SATISFIED_BY) ─────────────────────
-    for spec in project_spec.requirements:
-        nid = _create_id("req")
-        req_ids[spec.name] = nid
-        graph.add_node(Requirement(
-            id=nid,
-            name=spec.name,
-            requirement_type=spec.requirement_type,
-            description=spec.description,
-        ))
-        # Wire: wire to project
-        graph.add_edge(BaseEdge(
-            edge_type="HAS_REQUIREMENT",
-            source_id=project_id,
-            target_id=nid,
-        ))
-
-        # Wire: Goal --SATISFIED_BY--> Requirement
-        if spec.goal_ref:
-            goal_id = goal_ids.get(spec.goal_ref)
-            if goal_id is None:
-                raise SnapshotConversionError(
-                    f"Requirement '{spec.name}' references unknown goal '{spec.goal_ref}'. "
-                    f"Known goals: {sorted(goal_ids)}"
-                )
+    if not (project_spec := project.project_spec):
+        pass
+    # ── Project Specification ──────────────────────────────────────────────────────
+    else:
+        # ── Goals ──────────────────────────────────────────────────────
+        for spec in project_spec.goals or []:
+            nid = _create_id("goal")
+            goal_ids[spec.name] = nid
+            graph.add_node(Goal(id=nid, name=spec.name, statement=spec.statement))
+            # Wire: wire to project
             graph.add_edge(BaseEdge(
-                edge_type="SATISFIED_BY",
-                source_id=goal_id,
+                edge_type="HAS_GOAL",
+                source_id=project_id,
                 target_id=nid,
             ))
 
-    # ── Capabilities (→ Requirement via REALIZED_BY) ───────────────
-    for spec in project_spec.capabilities:
-        nid = _create_id("cap")
-        cap_ids[spec.name] = nid
-        graph.add_node(Capability(
-            id=nid,
-            name=spec.name,
-            description=spec.description,
-        ))
-        # Wire: wire to project
-        graph.add_edge(BaseEdge(
-            edge_type="HAS_CAPABILITY",
-            source_id=project_id,
-            target_id=nid,
-        ))
-
-        for ref in spec.requirement_refs:
-            req_id = req_ids.get(ref)
-            if req_id is None:
-                raise SnapshotConversionError(
-                    f"Capability '{spec.name}' references unknown requirement '{ref}'. "
-                    f"Known requirements: {sorted(req_ids)}"
-                )
+        # ── Requirements (→ Goal via SATISFIED_BY) ─────────────────────
+        for spec in project_spec.requirements or []:
+            nid = _create_id("req")
+            req_ids[spec.name] = nid
+            graph.add_node(Requirement(
+                id=nid,
+                name=spec.name,
+                requirement_type=spec.requirement_type,
+                description=spec.description,
+            ))
+            # Wire: wire to project
             graph.add_edge(BaseEdge(
-                edge_type="REALIZED_BY",
-                source_id=req_id,
+                edge_type="HAS_REQUIREMENT",
+                source_id=project_id,
                 target_id=nid,
             ))
 
-    # ── Dependencies (added before components so refs resolve) ─────
-    for spec in project_spec.dependencies:
-        nid = _create_id("dep")
-        dep_ids[spec.name] = nid
-        graph.add_node(Dependency(
-            id=nid,
-            name=spec.name,
-            description=spec.description,
-        ))
-        # Wire: wire to project  todo - wire dependencies to a goal instead of at the project level?
-        graph.add_edge(BaseEdge(
-            edge_type="HAS_DEPENDENCY",
-            source_id=project_id,
-            target_id=nid,
-        ))
+            # Wire: Goal --SATISFIED_BY--> Requirement
+            if spec.goal_ref:
+                goal_id = goal_ids.get(spec.goal_ref)
+                if goal_id is None:
+                    raise SnapshotConversionError(
+                        f"Requirement '{spec.name}' references unknown goal '{spec.goal_ref}'. "
+                        f"Known goals: {sorted(goal_ids)}"
+                    )
+                graph.add_edge(BaseEdge(
+                    edge_type="SATISFIED_BY",
+                    source_id=goal_id,
+                    target_id=nid,
+                ))
 
-    # ── Components (→ Capability via REALIZED_BY, → Dependency via DEPENDS_ON)
-    for spec in project_spec.components:
-        nid = _create_id("comp")
-        comp_ids[spec.name] = nid
-        graph.add_node(Component(
-            id=nid,
-            name=spec.name,
-            description=spec.description,
-            has_no_dependencies=spec.has_no_dependencies,
-        ))
-        # Wire: wire to project  todo - wire components to a goal instead of at the project level?
-        graph.add_edge(BaseEdge(
-            edge_type="HAS_COMPONENT",
-            source_id=project_id,
-            target_id=nid,
-        ))
-
-        for ref in spec.capability_refs:
-            cap_id = cap_ids.get(ref)
-            if cap_id is None:
-                raise SnapshotConversionError(
-                    f"Component '{spec.name}' references unknown capability '{ref}'. "
-                    f"Known capabilities: {sorted(cap_ids)}"
-                )
+        # ── Capabilities (→ Requirement via REALIZED_BY) ───────────────
+        for spec in project_spec.capabilities or []:
+            nid = _create_id("cap")
+            cap_ids[spec.name] = nid
+            graph.add_node(Capability(
+                id=nid,
+                name=spec.name,
+                description=spec.description,
+            ))
+            # Wire: wire to project
             graph.add_edge(BaseEdge(
-                edge_type="REALIZED_BY",
-                source_id=cap_id,
+                edge_type="HAS_CAPABILITY",
+                source_id=project_id,
                 target_id=nid,
             ))
-        for ref in spec.dependency_refs:
-            dep_id = dep_ids.get(ref)
-            if dep_id is None:
-                raise SnapshotConversionError(
-                    f"Component '{spec.name}' references unknown dependency '{ref}'. "
-                    f"Known dependencies: {sorted(dep_ids)}"
-                )
+
+            for ref in spec.requirement_refs:
+                req_id = req_ids.get(ref)
+                if req_id is None:
+                    raise SnapshotConversionError(
+                        f"Capability '{spec.name}' references unknown requirement '{ref}'. "
+                        f"Known requirements: {sorted(req_ids)}"
+                    )
+                graph.add_edge(BaseEdge(
+                    edge_type="REALIZED_BY",
+                    source_id=req_id,
+                    target_id=nid,
+                ))
+
+        # ── Dependencies (added before components so refs resolve) ─────
+        for spec in project_spec.dependencies or []:
+            nid = _create_id("dep")
+            dep_ids[spec.name] = nid
+            graph.add_node(Dependency(
+                id=nid,
+                name=spec.name,
+                description=spec.description,
+            ))
+            # Wire: wire to project  todo - wire dependencies to a goal instead of at the project level?
             graph.add_edge(BaseEdge(
-                edge_type="DEPENDS_ON",
-                source_id=nid,
-                target_id=dep_id,
+                edge_type="HAS_DEPENDENCY",
+                source_id=project_id,
+                target_id=nid,
             ))
 
-    # ── Constraints (standalone — no automatic edges) ──────────────
-    for spec in project_spec.constraints:
-        nid = _create_id("cstr")
-        graph.add_node(Constraint(id=nid, name=spec.name, statement=spec.statement))
-        # Wire: wire to project  todo - wire components to a goal instead of at the project level?
-        graph.add_edge(BaseEdge(
-            edge_type="HAS_CONSTRAINT",
-            source_id=project_id,
-            target_id=nid,
-        ))
+        # ── Components (→ Capability via REALIZED_BY, → Dependency via DEPENDS_ON)
+        for spec in project_spec.components or []:
+            nid = _create_id("comp")
+            comp_ids[spec.name] = nid
+            graph.add_node(Component(
+                id=nid,
+                name=spec.name,
+                description=spec.description,
+                has_no_dependencies=spec.has_no_dependencies,
+            ))
+            # Wire: wire to project  todo - wire components to a goal instead of at the project level?
+            graph.add_edge(BaseEdge(
+                edge_type="HAS_COMPONENT",
+                source_id=project_id,
+                target_id=nid,
+            ))
+
+            for ref in spec.capability_refs:
+                cap_id = cap_ids.get(ref)
+                if cap_id is None:
+                    raise SnapshotConversionError(
+                        f"Component '{spec.name}' references unknown capability '{ref}'. "
+                        f"Known capabilities: {sorted(cap_ids)}"
+                    )
+                graph.add_edge(BaseEdge(
+                    edge_type="REALIZED_BY",
+                    source_id=cap_id,
+                    target_id=nid,
+                ))
+            for ref in spec.dependency_refs:
+                dep_id = dep_ids.get(ref)
+                if dep_id is None:
+                    raise SnapshotConversionError(
+                        f"Component '{spec.name}' references unknown dependency '{ref}'. "
+                        f"Known dependencies: {sorted(dep_ids)}"
+                    )
+                graph.add_edge(BaseEdge(
+                    edge_type="DEPENDS_ON",
+                    source_id=nid,
+                    target_id=dep_id,
+                ))
+
+        # ── Constraints (standalone — no automatic edges) ──────────────
+        for spec in project_spec.constraints or []:
+            nid = _create_id("cstr")
+            graph.add_node(Constraint(id=nid, name=spec.name, statement=spec.statement))
+            # Wire: wire to project  todo - wire components to a goal instead of at the project level?
+            graph.add_edge(BaseEdge(
+                edge_type="HAS_CONSTRAINT",
+                source_id=project_id,
+                target_id=nid,
+            ))
 
     return graph
 

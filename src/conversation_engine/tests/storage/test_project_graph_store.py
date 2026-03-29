@@ -8,33 +8,51 @@ Coverage:
 """
 from __future__ import annotations
 
-import uuid
+from typing import Dict, List
 
 import pytest
 
 from conversation_engine.fixtures import create_graph_complete
+from conversation_engine.models import Goal, Requirement
+from conversation_engine.models.base import BaseEdge, NodeType
 from conversation_engine.models.domain_config import DomainConfig
-from conversation_engine.models.project_spec import ProjectSpecification, GoalSpec, RequirementSpec
+from conversation_engine.models.project_spec import ProjectSpecification
+from conversation_engine.models.rule_node import IntegrityRule
+# from conversation_engine.models.query_node import GraphQueryPattern
+from conversation_engine.models.validation_quiz import FactualQuiz, QuizType, ReasoningQuiz
+from conversation_engine.storage.graph import KnowledgeGraph
 from conversation_engine.storage.graph_project_store import GraphProjectStore
 from conversation_engine.storage.project_facade import project_to_graph, graph_to_domain_config
 from conversation_engine.storage.project_store import (
-    InMemoryProjectStore,
     ProjectStore,
 )
-from conversation_engine.storage.graph import KnowledgeGraph
-from conversation_engine.models.rule_node import IntegrityRule
-# from conversation_engine.models.query_node import GraphQueryPattern
-from conversation_engine.models.validation_quiz import ValidationQuiz, FactualQuiz, QuizType, ReasoningQuiz
-from conversation_engine.graph.architectural_context import (
-    ArchitecturalOntologyContext,
-)
-from conversation_engine.infrastructure.llm.architectural_quiz import (
-    ARCHITECTURAL_SYSTEM_PROMPT,
-    ARCHITECTURAL_QUIZ,
-)
-from conversation_engine.models import Goal, Requirement
-from conversation_engine.models.base import BaseEdge, NodeType
 from conversation_engine.storage.snapshot_facade import graph_to_snapshot
+from conversation_engine.models.graph_db_access import GraphAccessLayer
+
+
+
+# ── Graph Access Layer ─────────────────────────────────────────
+class GraphAccessLayerMock(GraphAccessLayer):
+    def __init__(self) -> None:
+        self._store: Dict[str, KnowledgeGraph] = {}
+
+    def save_graph(self, project_name: str, graph: KnowledgeGraph) -> None:
+        self._store[project_name] = graph
+
+    def get_graph(self, project_name: str) -> KnowledgeGraph:
+        return self._store.get(project_name)
+
+    def delete_graph(self, project_name: str) -> bool:
+        if project_name in self._store:
+            del self._store[project_name]
+            return True
+        return False
+
+    def list_projects(self) -> List[str]:
+        return list(self._store.keys())
+
+    def exists(self, project_name: str) -> bool:
+        return project_name in self._store
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -113,12 +131,14 @@ def rule_without_id(rule):
     return rule_dict
 
 
+# ── Tests ──────────────────────────────────────────────────────────
+
+
 class TestKnowledgeGraphTransforms:
 
     # ── save / load ──────────────────────────────────────────────────
 
     def test_build_grap_from_domain(self):
-        store = GraphProjectStore()
         config = _full_config()
         project_graph = project_to_graph(config)
         # todo add better asserts by type
@@ -179,3 +199,93 @@ class TestKnowledgeGraphTransforms:
 
         print("✅ Perfect round-trip conversion!")
 
+
+    def test_is_project_store(self):
+        store = GraphProjectStore(GraphAccessLayerMock())
+        assert isinstance(store, ProjectStore)
+
+    # ── save / load ──────────────────────────────────────────────────
+
+    def test_save_and_load(self):
+        store = GraphProjectStore(GraphAccessLayerMock())
+        cfg = _full_config()
+        store.save(cfg)
+        loaded = store.load("test-project")
+        assert loaded is not None
+        assert loaded.project_name == "test-project"
+        assert loaded.project_spec is not None
+        assert len(loaded.project_spec.goals) == 2
+
+    def test_load_nonexistent_returns_none(self):
+        store = GraphProjectStore(GraphAccessLayerMock())
+        assert store.load("nope") is None
+
+    def test_save_upsert_replaces(self):
+        store = GraphProjectStore(GraphAccessLayerMock())
+        store.save(_full_config())
+        new_cfg = DomainConfig(
+            project_name="test-project",
+            system_prompt="updated prompt",
+        )
+        store.save(new_cfg)
+        loaded = store.load("test-project")
+        assert loaded is not None
+        assert loaded.system_prompt == "updated prompt"
+        assert len(loaded.project_spec.goals or []) == 0 # overwritten, not merged
+
+    def test_save_empty_name_raises(self):
+        store = GraphProjectStore(GraphAccessLayerMock())
+        cfg = DomainConfig(project_name="")
+        with pytest.raises(ValueError, match="must not be empty"):
+            store.save(cfg)
+
+    # ── delete ───────────────────────────────────────────────────────
+
+    def test_delete_existing(self):
+        store = GraphProjectStore(GraphAccessLayerMock())
+        store.save(_full_config())
+        assert store.delete("test-project") is True
+        assert store.load("test-project") is None
+
+    def test_delete_nonexistent(self):
+        store = GraphProjectStore(GraphAccessLayerMock())
+        assert store.delete("nope") is False
+
+    # ── list ─────────────────────────────────────────────────────────
+
+    def test_list_projects_empty(self):
+        store = GraphProjectStore(GraphAccessLayerMock())
+        assert store.list_projects() == []
+
+    def test_list_projects_multiple(self):
+        store = GraphProjectStore(GraphAccessLayerMock())
+        store.save(DomainConfig(project_name="alpha"))
+        store.save(DomainConfig(project_name="beta"))
+        store.save(DomainConfig(project_name="gamma"))
+        names = sorted(store.list_projects())
+        assert names == ["alpha", "beta", "gamma"]
+
+    # ── exists ───────────────────────────────────────────────────────
+
+    def test_exists_true(self):
+        store = GraphProjectStore(GraphAccessLayerMock())
+        store.save(_full_config())
+        assert store.exists("test-project") is True
+
+    def test_exists_false(self):
+        store = GraphProjectStore(GraphAccessLayerMock())
+        assert store.exists("nope") is False
+
+    # ── round-trip with all fields ───────────────────────────────────
+
+    def test_round_trip_preserves_all_fields(self):
+        store = GraphProjectStore(GraphAccessLayerMock())
+        original = _full_config()
+        store.save(original)
+        loaded = store.load("test-project")
+        assert loaded is not None
+        assert loaded.project_name == original.project_name
+        assert loaded.system_prompt == original.system_prompt
+        assert loaded.metadata == original.metadata
+        assert len(loaded.rules) == len(original.rules)
+        assert len(loaded.quiz) == len(original.quiz)

@@ -17,14 +17,17 @@ Usage::
 """
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
-from conversation_engine.storage import ProjectStore, snapshot_to_graph
-from conversation_engine.storage.project_facade import project_to_graph
+from conversation_engine.storage import ProjectStore
+from conversation_engine.storage.project_facade import project_to_graph, graph_to_domain_config
+from conversation_engine.models.graph_db_access import GraphAccessLayer
 
 if TYPE_CHECKING:
     from conversation_engine.models.domain_config import DomainConfig
+
+
+
 
 
 # ── Graph implementation ─────────────────────────────────────────
@@ -38,8 +41,9 @@ class GraphProjectStore(ProjectStore):
     caller's objects do not silently alter stored data.
     """
 
-    def __init__(self) -> None:
-        self._store: Dict[str, DomainConfig] = {}
+    def __init__( self, graph: GraphAccessLayer ) -> None:
+        self._graph_access_layer = graph
+
 
     def save(self, config: DomainConfig) -> None:
         if not config.project_name:
@@ -48,30 +52,20 @@ class GraphProjectStore(ProjectStore):
         # project_name
         project_graph = project_to_graph(config)
 
-
-        print(project_graph)
-
-
-
-
-
-
-
-
-
-
+        # save the graph
+        self._graph_access_layer.save_graph(config.project_name, project_graph)
 
     def load(self, project_name: str) -> Optional[DomainConfig]:
-        return self._store.get(project_name)
+        graph = self._graph_access_layer.get_graph(project_name)
+        if graph is None:
+            return None
+        return graph_to_domain_config(graph)
 
     def delete(self, project_name: str) -> bool:
-        if project_name in self._store:
-            del self._store[project_name]
-            return True
-        return False
+        return self._graph_access_layer.delete_graph(project_name)
 
     def list_projects(self) -> List[str]:
-        return list(self._store.keys())
+        return self._graph_access_layer.list_projects()
 
     def exists(self, project_name: str) -> bool:
-        return project_name in self._store
+        return self._graph_access_layer.exists(project_name)
