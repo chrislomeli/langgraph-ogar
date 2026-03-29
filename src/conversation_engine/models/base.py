@@ -39,6 +39,8 @@ EdgeType = Literal[
     "HAS_DEPENDENCY",
     "HAS_CONSTRAINT",
     "HAS_RULE",
+    "HAS_REASONING_QUIZ",
+    "HAS_FACTUAL_QUIZ",
     "HAS_QUIZ",
     "HAS_QUERY_PATTERN",
     "SATISFIED_BY",
@@ -52,6 +54,8 @@ EdgeType = Literal[
     "HAS_SCENARIO",
     "INSTANCE_OF",
 ]
+
+
 
 
 class BaseNode(BaseModel):

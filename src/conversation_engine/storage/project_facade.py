@@ -21,7 +21,7 @@ import json
 import uuid
 from typing import Dict, List, Optional
 
-from conversation_engine.models.base import BaseEdge
+from conversation_engine.models.base import BaseEdge, EdgeType, NodeType
 from conversation_engine.models.domain_config import DomainConfig
 from conversation_engine.models.nodes import (
     Goal,
@@ -59,6 +59,8 @@ def _create_id(prefix: str) -> str:
 class SnapshotConversionError(Exception):
     """Raised when a snapshot contains invalid references."""
 
+def _get_quiz_edge_type(quiz_type: str) -> EdgeType:
+    return "HAS_REASONING_QUIZ" if quiz_type.lower() == "reasoning" else "HAS_FACTUAL_QUIZ"
 
 def project_to_graph(project: DomainConfig) -> KnowledgeGraph:
     graph = KnowledgeGraph()
@@ -67,8 +69,6 @@ def project_to_graph(project: DomainConfig) -> KnowledgeGraph:
     # todo - we need to add these and create a top level node?
     rules = project.rules
     quiz= project.quiz
-
-
 
     # 1. Add the root Project node
     project_id = _create_id("project")
@@ -99,6 +99,24 @@ def project_to_graph(project: DomainConfig) -> KnowledgeGraph:
             source_id=project_id,
             target_id=nid,
         ))
+
+
+    # ── Quiz ──────────────────────────────────────────────────────
+    for spec in project.quiz:
+        quiz_type = spec.quiz_type
+        edge_type = "HAS_FACTUAL_QUIZ"
+        if quiz_type.startswith("reason"):
+            edge_type = "HAS_REASONING_QUIZ"
+        nid = _create_id(quiz_type)
+        # Create a copy with the new ID
+        quiz_with_id = spec.model_copy(update={"id": nid})
+        graph.add_node(quiz_with_id)
+        graph.add_edge(BaseEdge(
+            edge_type=_get_quiz_edge_type(quiz_type),
+            source_id=project_id,
+            target_id=nid,
+        ))
+
 
     # ── Goals ──────────────────────────────────────────────────────
     for spec in project_spec.goals:
@@ -246,6 +264,53 @@ def project_to_graph(project: DomainConfig) -> KnowledgeGraph:
 
 # ── KnowledgeGraph → Snapshot ──────────────────────────────────────
 
+def graph_to_domain_config(graph: KnowledgeGraph) -> DomainConfig:
+    """
+    Convert a ``KnowledgeGraph`` back to a ``DomainConfig``.
+    
+    Reconstructs the complete domain configuration including:
+    - Project metadata (from root Project node)
+    - ProjectSpecification (existing logic)
+    - Quiz nodes (both FactualQuiz and ReasoningQuiz)
+    - Rule nodes
+    """
+    # ── Find the root Project node ──────────────────────────────────────
+    project_nodes = graph.get_nodes_by_type(NodeType.PROJECT)
+    if not project_nodes:
+        raise ValueError("No project node found in graph")
+    project_node = project_nodes[0]
+    system_prompt = project_node.system_prompt
+    meta_data = project_node.metadata
+    project_name = project_node.name
+
+    # ── Extract quiz nodes ──────────────────────────────────────────────
+    quiz_nodes: List[ValidationQuiz] = graph.get_nodes_by_type(NodeType.QUIZ)  # type: ignore
+
+    # ── Extract rule nodes ──────────────────────────────────────────────
+    rule_nodes: List[IntegrityRule] = graph.get_nodes_by_type(NodeType.RULE)  # type: ignore
+
+    # ── Get ProjectSpecification using existing logic ───────────────────
+    project_specification = graph_to_snapshot(project_node.name, graph)
+    
+    # ── Parse metadata from JSON string ─────────────────────────────────
+    metadata = {}
+    if meta_data:
+        try:
+            metadata = json.loads(meta_data)
+        except json.JSONDecodeError:
+            # If metadata is not valid JSON, treat as empty dict
+            metadata = {}
+
+    # ── Build complete DomainConfig ─────────────────────────────────────
+    return DomainConfig(
+        project_name=project_name,
+        project_spec=project_specification,
+        quiz=quiz_nodes,
+        rules=rule_nodes,
+        system_prompt=system_prompt or "",
+        metadata=metadata,
+    )
+
 def graph_to_snapshot(project_name: str, graph: KnowledgeGraph) -> ProjectSpecification:
     """
     Convert a ``KnowledgeGraph`` back to a ``ProjectSpecification``.
@@ -364,3 +429,5 @@ def graph_to_snapshot(project_name: str, graph: KnowledgeGraph) -> ProjectSpecif
         constraints=constraint_specs,
         dependencies=dep_specs,
     )
+
+
