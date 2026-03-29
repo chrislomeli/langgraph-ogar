@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod, ABC
+from typing import List
 
 from conversation_engine.storage.graph import KnowledgeGraph
 
