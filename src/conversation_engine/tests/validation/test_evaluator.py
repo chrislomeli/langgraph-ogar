@@ -11,7 +11,7 @@ from conversation_engine.models.project_spec import ProjectSpecification, GoalSp
 from conversation_engine.models.rule_node import IntegrityRule
 from conversation_engine.storage import KnowledgeGraph
 from conversation_engine.validation import RuleEvaluator
-from ogar.fixtures import (
+from conversation_engine.fixtures import (
     create_graph_with_gaps,
     create_graph_complete,
     create_graph_partial_coverage,
