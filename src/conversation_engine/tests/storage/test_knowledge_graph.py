@@ -9,7 +9,7 @@ These tests validate proper graph semantics:
 """
 import pytest
 
-from conversation_engine.models import Goal, Requirement, Capability, Component
+from conversation_engine.models import Goal, Requirement, Step
 from conversation_engine.models.base import BaseEdge
 from conversation_engine.storage import KnowledgeGraph
 
@@ -287,14 +287,14 @@ class TestEdgeOperations:
         
         goal = Goal(id="goal-1", name="Goal", statement="Test")
         req = Requirement(id="req-1", name="Requirement")
-        cap = Capability(id="cap-1", name="Capability")
+        step = Step(id="step-1", name="Step")
         
         graph.add_node(goal)
         graph.add_node(req)
-        graph.add_node(cap)
+        graph.add_node(step)
         
         edge1 = BaseEdge(edge_type="SATISFIED_BY", source_id="goal-1", target_id="req-1")
-        edge2 = BaseEdge(edge_type="REALIZED_BY", source_id="req-1", target_id="cap-1")
+        edge2 = BaseEdge(edge_type="REALIZED_BY", source_id="req-1", target_id="step-1")
         
         graph.add_edge(edge1)
         graph.add_edge(edge2)
@@ -410,18 +410,18 @@ class TestGraphSemantics:
         """Test that multiple edge types can exist between the same nodes."""
         graph = KnowledgeGraph()
         
-        node1 = Component(id="comp-1", name="Component 1")
-        node2 = Component(id="comp-2", name="Component 2")
+        node1 = Step(id="step-1", name="Step 1")
+        node2 = Step(id="step-2", name="Step 2")
         
         graph.add_node(node1)
         graph.add_node(node2)
         
-        edge1 = BaseEdge(edge_type="DEPENDS_ON", source_id="comp-1", target_id="comp-2")
-        edge2 = BaseEdge(edge_type="INFORMS", source_id="comp-1", target_id="comp-2")
+        edge1 = BaseEdge(edge_type="DEPENDS_ON", source_id="step-1", target_id="step-2")
+        edge2 = BaseEdge(edge_type="INFORMS", source_id="step-1", target_id="step-2")
         
         graph.add_edge(edge1)
         graph.add_edge(edge2)
         
         assert graph.edge_count() == 2
-        assert graph.get_edge("comp-1", "DEPENDS_ON", "comp-2") is not None
-        assert graph.get_edge("comp-1", "INFORMS", "comp-2") is not None
+        assert graph.get_edge("step-1", "DEPENDS_ON", "step-2") is not None
+        assert graph.get_edge("step-1", "INFORMS", "step-2") is not None

@@ -38,32 +38,43 @@ class RequirementSpec(BaseModel):
     description: Optional[str] = Field(None, description="Detailed description")
 
 
-class CapabilitySpec(BaseModel):
-    """An observable system behaviour linked to requirements."""
-    name: str = Field(..., description="Human-readable capability name")
+StepStatus = Literal["pending", "in_progress", "done", "blocked"]
+
+
+class StepSpec(BaseModel):
+    """A concrete work item that realises a requirement."""
+    name: str = Field(..., description="Human-readable step name")
     requirement_refs: List[str] = Field(
         default_factory=list,
-        description="Names of requirements this capability realises",
-    )
-    description: Optional[str] = Field(None, description="Description of what the capability enables")
-
-
-class ComponentSpec(BaseModel):
-    """A system module linked to capabilities and dependencies."""
-    name: str = Field(..., description="Human-readable component name")
-    capability_refs: List[str] = Field(
-        default_factory=list,
-        description="Names of capabilities this component realises",
+        description="Names of requirements this step realises",
     )
     dependency_refs: List[str] = Field(
         default_factory=list,
-        description="Names of dependencies this component depends on",
+        description="Names of dependencies this step depends on",
+    )
+    blocker_refs: List[str] = Field(
+        default_factory=list,
+        description="Names of other steps that block this step",
+    )
+    status: StepStatus = Field(
+        "pending",
+        description="Current status: pending, in_progress, done, or blocked",
+    )
+    percentage: int = Field(
+        0,
+        description="Completion percentage (0-100)",
+        ge=0,
+        le=100,
     )
     has_no_dependencies: bool = Field(
         False,
-        description="Explicitly marks that this component has no dependencies",
+        description="Explicitly marks that this step has no external dependencies",
     )
-    description: Optional[str] = Field(None, description="Description of the component's purpose")
+    description: Optional[str] = Field(None, description="Description of what this step accomplishes")
+
+
+# ── Backwards-compatible alias ────────────────────────────────────
+ComponentSpec = StepSpec
 
 
 class ConstraintSpec(BaseModel):
@@ -89,10 +100,13 @@ class ProjectSpecification(BaseModel):
     converts it to/from the internal ``KnowledgeGraph`` when needed.
     """
     project_name: str = Field(..., description="Unique project identifier")
+    description: Optional[str] = Field(
+        None,
+        description="Brief description of what this project is and what problem it solves",
+    )
     goals: List[GoalSpec] = Field(default_factory=list, description="Project goals")
     requirements: List[RequirementSpec] = Field(default_factory=list, description="Requirements linked to goals")
-    capabilities: List[CapabilitySpec] = Field(default_factory=list, description="Capabilities linked to requirements")
-    components: List[ComponentSpec] = Field(default_factory=list, description="Components linked to capabilities")
+    steps: List[StepSpec] = Field(default_factory=list, description="Steps (work items) linked to requirements")
     constraints: List[ConstraintSpec] = Field(default_factory=list, description="System constraints")
     dependencies: List[DependencySpec] = Field(default_factory=list, description="External dependencies")
 

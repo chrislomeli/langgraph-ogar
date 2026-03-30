@@ -5,7 +5,7 @@ Validates that integrity rules are correctly evaluated against graph state.
 Also validates that the evaluator accepts ProjectSpecification directly.
 """
 
-from conversation_engine.models import Goal, Requirement, Component
+from conversation_engine.models import Goal, Requirement, Step
 from conversation_engine.models.base import BaseEdge
 from conversation_engine.models.project_spec import ProjectSpecification, GoalSpec, RequirementSpec
 from conversation_engine.models.rule_node import IntegrityRule
@@ -223,20 +223,20 @@ class TestMinimumOutgoingOrFlag:
         """Test that explicit flag allows node to have no edges."""
         graph = KnowledgeGraph()
         
-        comp = Component(id="comp-1", name="Component", has_no_dependencies=True)
-        graph.add_node(comp)
+        step = Step(id="step-1", name="Step", has_no_dependencies=True)
+        graph.add_node(step)
         
         rule = IntegrityRule(
             id="rule-test",
             name="Test Rule",
-            description="Components must declare dependencies",
-            applies_to_node_type="component",
+            description="Steps must declare dependencies",
+            applies_to_node_type="step",
             rule_type="minimum_outgoing_edge_count_or_flag",
                         target_node_types=["dependency"],
             minimum_count=1,
             allow_explicit_none_flag=True,
             severity="medium",
-            failure_message_template="Component '{subject_name}' has no dependencies."
+            failure_message_template="Step '{subject_name}' has no dependencies."
         )
         
         evaluator = RuleEvaluator(graph)
@@ -248,20 +248,20 @@ class TestMinimumOutgoingOrFlag:
         """Test that without flag, edges are required."""
         graph = KnowledgeGraph()
         
-        comp = Component(id="comp-1", name="Component", has_no_dependencies=False)
-        graph.add_node(comp)
+        step = Step(id="step-1", name="Step", has_no_dependencies=False)
+        graph.add_node(step)
         
         rule = IntegrityRule(
             id="rule-test",
             name="Test Rule",
-            description="Components must declare dependencies",
-            applies_to_node_type="component",
+            description="Steps must declare dependencies",
+            applies_to_node_type="step",
             rule_type="minimum_outgoing_edge_count_or_flag",
                         target_node_types=["dependency"],
             minimum_count=1,
             allow_explicit_none_flag=True,
             severity="medium",
-            failure_message_template="Component '{subject_name}' has no dependencies."
+            failure_message_template="Step '{subject_name}' has no dependencies."
         )
         
         evaluator = RuleEvaluator(graph)
@@ -292,13 +292,13 @@ class TestEvaluateMultipleRules:
         rule2 = IntegrityRule(
             id="rule-req",
             name="Requirement Rule",
-            description="Requirements must have capabilities",
+            description="Requirements must have steps",
             applies_to_node_type="requirement",
             rule_type="minimum_outgoing_edge_count",
-                        target_node_types=["capability"],
+                        target_node_types=["step"],
             minimum_count=1,
             severity="high",
-            failure_message_template="Requirement '{subject_name}' has no capabilities."
+            failure_message_template="Requirement '{subject_name}' has no steps."
         )
         
         evaluator = RuleEvaluator(graph)
@@ -331,13 +331,13 @@ class TestEvaluateMultipleRules:
         rule_medium = IntegrityRule(
             id="rule-medium",
             name="Medium Severity Rule",
-            description="Requirements must have capabilities",
+            description="Requirements must have steps",
             applies_to_node_type="requirement",
             rule_type="minimum_outgoing_edge_count",
-                        target_node_types=["capability"],
+                        target_node_types=["step"],
             minimum_count=1,
             severity="medium",
-            failure_message_template="Requirement '{subject_name}' has no capabilities."
+            failure_message_template="Requirement '{subject_name}' has no steps."
         )
         
         evaluator = RuleEvaluator(graph)
@@ -466,16 +466,16 @@ class TestEvaluatorWithProjectSpecification:
 
     def test_spec_multiple_rules(self):
         """Multiple rules evaluated against a spec."""
-        req_cap_rule = IntegrityRule(
-            id="rule-req-cap",
-            name="Requirement → Capability",
-            description="Every requirement must have at least one capability",
+        req_step_rule = IntegrityRule(
+            id="rule-req-step",
+            name="Requirement → Step",
+            description="Every requirement must have at least one step",
             applies_to_node_type="requirement",
             rule_type="minimum_outgoing_edge_count",
-                        target_node_types=["capability"],
+                        target_node_types=["step"],
             minimum_count=1,
             severity="medium",
-            failure_message_template="Requirement '{subject_name}' has no capabilities.",
+            failure_message_template="Requirement '{subject_name}' has no steps.",
         )
         spec = ProjectSpecification(
             project_name="multi",
@@ -483,10 +483,10 @@ class TestEvaluatorWithProjectSpecification:
             requirements=[RequirementSpec(name="R1", goal_ref="G1")],
         )
         evaluator = RuleEvaluator(spec)
-        violations = evaluator.evaluate_all_rules([self._goal_req_rule, req_cap_rule])
-        # G1→R1 satisfied, but R1 has no capability
+        violations = evaluator.evaluate_all_rules([self._goal_req_rule, req_step_rule])
+        # G1→R1 satisfied, but R1 has no step
         assert len(violations) == 1
-        assert violations[0].rule_id == "rule-req-cap"
+        assert violations[0].rule_id == "rule-req-step"
 
     def test_empty_spec_no_violations(self):
         """Empty spec has no nodes, so no violations."""

@@ -9,8 +9,7 @@ from pydantic import ValidationError
 from conversation_engine.models import (
     Goal,
     Requirement,
-    Capability,
-    Component,
+    Step,
     IntegrityRule,
     # GraphQueryPattern,
     Assessment,
@@ -57,14 +56,14 @@ class TestNodeModels:
         assert req.id == "REQ-001"
         assert req.requirement_type == "functional"
     
-    def test_component_with_no_dependencies(self):
-        """Test Component with explicit no dependencies flag."""
-        component = Component(
-            id="component-test",
-            name="Test Component",
+    def test_step_with_no_dependencies(self):
+        """Test Step with explicit no dependencies flag."""
+        step = Step(
+            id="step-test",
+            name="Test Step",
             has_no_dependencies=True
         )
-        assert component.has_no_dependencies is True
+        assert step.has_no_dependencies is True
 
 
 class TestTraceabilityModels:

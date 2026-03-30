@@ -26,7 +26,7 @@ from conversation_engine.graph.builder import (
 from conversation_engine.storage.graph import KnowledgeGraph
 from conversation_engine.fixtures import (
     goal_req_rule,
-    req_cap_rule,
+    req_step_rule,
     make_context,
     make_state,
     create_graph_with_gaps,
@@ -217,7 +217,7 @@ class TestConversationGraphIntegration:
         graph = build_conversation_graph()
         state = make_state(
             create_graph_with_gaps(),
-            rules=[goal_req_rule(), req_cap_rule()],
+            rules=[goal_req_rule(), req_step_rule()],
         )
 
         result = graph.invoke(state)
@@ -228,7 +228,7 @@ class TestConversationGraphIntegration:
         for f in open_findings:
             rule_ids.update(f.related_rule_ids)
         assert "rule-goal-req" in rule_ids
-        assert "rule-req-cap" in rule_ids
+        assert "rule-req-step" in rule_ids
 
     def test_minimal_graph_passes(self):
         """Minimal graph with matching rule should pass."""

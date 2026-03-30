@@ -5,7 +5,7 @@ Each node type represents a specific kind of architectural knowledge.
 """
 from __future__ import annotations
 
-from typing import List, Literal, Optional
+from typing import Dict, List, Literal, Optional
 from pydantic import Field
 
 from conversation_engine.models.base import BaseNode, NodeType
@@ -145,6 +145,41 @@ class Component(BaseNode):
     has_no_dependencies: bool = Field(
         False,
         description="Explicitly marks that this component has no dependencies"
+    )
+
+
+StepStatus = Literal["pending", "in_progress", "done", "blocked"]
+
+
+class Step(BaseNode):
+    """
+    A step represents a concrete work item that realises a requirement.
+
+    Steps track progress via status and percentage, and may reference
+    other steps as blockers.
+    """
+    node_type: NodeType = Field(NodeType.STEP, description="Type of this node")
+    description: Optional[str] = Field(
+        None,
+        description="Description of what this step accomplishes"
+    )
+    status: StepStatus = Field(
+        "pending",
+        description="Current status of this step"
+    )
+    percentage: int = Field(
+        0,
+        description="Completion percentage (0-100)",
+        ge=0,
+        le=100,
+    )
+    blocker_refs: List[str] = Field(
+        default_factory=list,
+        description="Names of other steps that block this step"
+    )
+    has_no_dependencies: bool = Field(
+        False,
+        description="Explicitly marks that this step has no external dependencies"
     )
 
 

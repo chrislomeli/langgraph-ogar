@@ -7,9 +7,8 @@ Requires a running Memgraph instance.
 from __future__ import annotations
 
 import json
-import pytest
 
-from tests.project_planner.conftest import requires_memgraph
+from archive.tests.project_planner.conftest import requires_memgraph
 from project_planner.persistence import commands, queries
 from project_planner.facade import policies
 

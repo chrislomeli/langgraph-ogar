@@ -71,15 +71,15 @@ def build_context() -> ArchitecturalOntologyContext:
             failure_message_template="Goal '{subject_name}' has no requirements.",
         ),
         IntegrityRule(
-            id="rule-req-cap",
-            name="Requirement → Capability",
-            description="Every requirement must have at least one capability",
+            id="rule-req-step",
+            name="Requirement → Step",
+            description="Every requirement must have at least one step",
             applies_to_node_type="requirement",
             rule_type="minimum_outgoing_edge_count",
-            target_node_types=["capability"],
+            target_node_types=["step"],
             minimum_count=1,
             severity="medium",
-            failure_message_template="Requirement '{subject_name}' has no capabilities.",
+            failure_message_template="Requirement '{subject_name}' has no steps.",
         ),
     ]
 

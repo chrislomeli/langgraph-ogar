@@ -368,8 +368,7 @@ class TestArchitecturalQuiz:
         # Must test for core node types
         assert "goal" in all_required
         assert "requirement" in all_required
-        assert "capability" in all_required
-        assert "component" in all_required
+        assert "step" in all_required
 
         # Must test for edge understanding
         assert "satisfied_by" in all_required

@@ -29,8 +29,7 @@ from conversation_engine.graph.architectural_context import (
 from conversation_engine.models import (
     Goal,
     Requirement,
-    Capability,
-    Component,
+    Step,
 )
 from conversation_engine.models.base import BaseEdge
 
@@ -41,11 +40,9 @@ def _sample_graph() -> KnowledgeGraph:
     g = KnowledgeGraph()
     g.add_node(Goal(id="g1", name="Goal 1", statement="A goal"))
     g.add_node(Requirement(id="r1", name="Req 1"))
-    g.add_node(Capability(id="c1", name="Cap 1"))
-    g.add_node(Component(id="comp1", name="Comp 1", has_no_dependencies=True))
+    g.add_node(Step(id="step1", name="Step 1", has_no_dependencies=True))
     g.add_edge(BaseEdge(edge_type="SATISFIED_BY", source_id="g1", target_id="r1"))
-    g.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="r1", target_id="c1"))
-    g.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="c1", target_id="comp1"))
+    g.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="r1", target_id="step1"))
     return g
 
 
@@ -142,8 +139,7 @@ class TestKnowledgeGraphSerialization:
         restored = KnowledgeGraph.from_dict(data)
         assert isinstance(restored.get_node("g1"), Goal)
         assert isinstance(restored.get_node("r1"), Requirement)
-        assert isinstance(restored.get_node("c1"), Capability)
-        assert isinstance(restored.get_node("comp1"), Component)
+        assert isinstance(restored.get_node("step1"), Step)
 
     def test_preserves_node_fields(self):
         original = _sample_graph()
@@ -152,8 +148,8 @@ class TestKnowledgeGraphSerialization:
         goal = restored.get_node("g1")
         assert goal.name == "Goal 1"
         assert goal.statement == "A goal"
-        comp = restored.get_node("comp1")
-        assert comp.has_no_dependencies is True
+        step = restored.get_node("step1")
+        assert step.has_no_dependencies is True
 
     def test_preserves_edges(self):
         original = _sample_graph()
@@ -163,13 +159,17 @@ class TestKnowledgeGraphSerialization:
         assert edge is not None
         assert edge.source_id == "g1"
         assert edge.target_id == "r1"
+        edge2 = restored.get_edge("r1", "REALIZED_BY", "step1")
+        assert edge2 is not None
+        assert edge2.source_id == "r1"
+        assert edge2.target_id == "step1"
 
     def test_json_safe(self):
         data = _sample_graph().to_dict()
         json_str = json.dumps(data)
         parsed = json.loads(json_str)
         restored = KnowledgeGraph.from_dict(parsed)
-        assert restored.node_count() == 4
+        assert restored.node_count() == 3
 
     def test_unknown_node_type_raises(self):
         data = {"nodes": [{"_type": "alien", "id": "x", "name": "X"}], "edges": []}

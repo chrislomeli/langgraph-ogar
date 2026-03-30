@@ -25,8 +25,7 @@ knowledge graph that represents a software system's architecture.
 The knowledge graph contains these node types:
 - goal: A desired outcome or objective
 - requirement: A specific system need (functional or non-functional)
-- capability: An observable system behavior
-- component: A system module or architectural component
+- step: A system implementation step or task
 - dependency: An external system, library, or service
 - feature: A high-level product offering
 - use_case: A user interaction or workflow
@@ -39,21 +38,19 @@ The knowledge graph contains these node types:
 
 Nodes are connected by typed edges that represent traceability:
 - SATISFIED_BY: goal → requirement (a goal is satisfied by requirements)
-- REALIZED_BY: requirement → capability (a requirement is realized by capabilities)
-- DEPENDS_ON: component → dependency (a component depends on something)
-- CONSTRAINS: constraint → component (a constraint limits a component)
-- SUPPORTS: capability → component (a capability is supported by components)
+- REALIZED_BY: requirement → step (a requirement is realized by steps)
+- DEPENDS_ON: step → dependency (a step depends on something)
+- CONSTRAINS: constraint → step (a constraint limits a step)
 - DESCRIBED_BY: use_case → scenario (a use case has scenarios)
 - DOCUMENTED_BY: any → documentation_artifact
 - HAS_SCENARIO: use_case → scenario
 - INSTANCE_OF: scenario → use_case
-- INFORMS: decision → component
+- INFORMS: decision → step
 
 Integrity rules enforce structural constraints:
 - Every goal MUST have at least one requirement (via SATISFIED_BY)
-- Every requirement MUST have at least one capability (via REALIZED_BY)
-- Every capability SHOULD be supported by a component (via SUPPORTS)
-- Every component SHOULD declare its dependencies (via DEPENDS_ON)
+- Every requirement MUST have at least one step (via REALIZED_BY)
+- Every step SHOULD declare its dependencies (via DEPENDS_ON)
 
 When integrity rules are violated, the system produces "findings" — \
 domain-agnostic reports of issues. Each finding has:
@@ -85,7 +82,7 @@ ARCHITECTURAL_QUIZ: list[FactualQuiz] = [
             "What are the main node types in the knowledge graph? "
             "List as many as you can."
         ),
-        expected_answer="goal, requirement, capability, component, dependency, feature",
+        expected_answer="goal, requirement, step, dependency, feature",
         weight=1.0,
         min_score=0.5,
     ),
@@ -96,9 +93,9 @@ ARCHITECTURAL_QUIZ: list[FactualQuiz] = [
         name="Edge Types and Traceability Quiz",
         question=(
             "How does traceability work in this knowledge graph? "
-            "Describe the chain from goals to components."
+            "Describe the chain from goals to steps."
         ),
-        expected_answer="goal, requirement, capability, component, satisfied_by, realized_by",
+        expected_answer="goal, requirement, step, satisfied_by, realized_by",
         weight=1.5,
         min_score=0.5,
     ),

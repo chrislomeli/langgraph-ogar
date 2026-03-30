@@ -172,7 +172,7 @@ class GraphQueries:
         """
         Traverse a path following a sequence of edge types.
         
-        This implements path pattern matching (e.g., Goal → Requirement → Capability).
+        This implements path pattern matching (e.g., Goal → Requirement → Step).
         
         Args:
             start_node_id: Starting node ID

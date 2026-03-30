@@ -5,7 +5,7 @@ These fixtures create graphs with specific characteristics for testing
 AI reasoning components.
 """
 from conversation_engine.storage import KnowledgeGraph
-from conversation_engine.models import Goal, Requirement, Capability, Component
+from conversation_engine.models import Goal, Requirement, Step
 from conversation_engine.models.base import BaseEdge
 
 
@@ -14,7 +14,7 @@ def create_minimal_graph() -> KnowledgeGraph:
     Create a minimal graph with just a few nodes and edges.
     
     Structure:
-    - 1 Goal → 1 Requirement → 1 Capability
+    - 1 Goal → 1 Requirement
     
     Use case: Basic smoke tests
     """
@@ -22,14 +22,11 @@ def create_minimal_graph() -> KnowledgeGraph:
     
     goal = Goal(id="goal-1", name="Test Goal", statement="A test goal")
     req = Requirement(id="req-1", name="Test Requirement")
-    cap = Capability(id="cap-1", name="Test Capability")
     
     graph.add_node(goal)
     graph.add_node(req)
-    graph.add_node(cap)
     
     graph.add_edge(BaseEdge(edge_type="SATISFIED_BY", source_id="goal-1", target_id="req-1"))
-    graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="req-1", target_id="cap-1"))
     
     return graph
 
@@ -42,7 +39,7 @@ def create_graph_with_gaps() -> KnowledgeGraph:
     - Goal 1 → Requirement 1 (connected)
     - Goal 2 (no requirements - GAP)
     - Goal 3 (no requirements - GAP)
-    - Requirement 2 (no capabilities - GAP)
+    - Requirement 2 (no components - GAP)
     
     Use case: Testing gap detection and AI explanation
     """
@@ -64,14 +61,8 @@ def create_graph_with_gaps() -> KnowledgeGraph:
     graph.add_node(req1)
     graph.add_node(req2)
     
-    # Capabilities
-    cap1 = Capability(id="cap-1", name="Test Capability")
-    
-    graph.add_node(cap1)
-    
     # Edges (intentionally incomplete)
     graph.add_edge(BaseEdge(edge_type="SATISFIED_BY", source_id="goal-1", target_id="req-1"))
-    graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="req-1", target_id="cap-1"))
     # goal-2 and goal-3 have no edges (gaps)
     # req-2 has no outgoing edges (gap)
     
@@ -86,7 +77,6 @@ def create_graph_with_orphans() -> KnowledgeGraph:
     - Goal 1 → Requirement 1 (connected)
     - Goal 2 (completely isolated)
     - Requirement 2 (completely isolated)
-    - Capability 1 (completely isolated)
     
     Use case: Testing orphan detection
     """
@@ -104,11 +94,9 @@ def create_graph_with_orphans() -> KnowledgeGraph:
     # Orphan nodes (no edges at all)
     goal2 = Goal(id="goal-2", name="Orphan Goal", statement="No edges")
     req2 = Requirement(id="req-2", name="Orphan Requirement")
-    cap1 = Capability(id="cap-1", name="Orphan Capability")
     
     graph.add_node(goal2)
     graph.add_node(req2)
-    graph.add_node(cap1)
     
     return graph
 
@@ -118,8 +106,8 @@ def create_graph_complete() -> KnowledgeGraph:
     Create a complete graph with no gaps.
     
     Structure:
-    - Goal 1 → Requirement 1 → Capability 1 → Component 1
-    - Goal 2 → Requirement 2 → Capability 2 → Component 2
+    - Goal 1 → Requirement 1 → Step 1
+    - Goal 2 → Requirement 2 → Step 2
     - All nodes properly connected
     
     Use case: Testing that validation passes when graph is complete
@@ -129,32 +117,26 @@ def create_graph_complete() -> KnowledgeGraph:
     # Chain 1
     goal1 = Goal(id="goal-1", name="Goal 1", statement="First goal")
     req1 = Requirement(id="req-1", name="Requirement 1")
-    cap1 = Capability(id="cap-1", name="Capability 1")
-    comp1 = Component(id="comp-1", name="Component 1")
+    step1 = Step(id="step-1", name="Step 1")
     
     graph.add_node(goal1)
     graph.add_node(req1)
-    graph.add_node(cap1)
-    graph.add_node(comp1)
+    graph.add_node(step1)
     
     graph.add_edge(BaseEdge(edge_type="SATISFIED_BY", source_id="goal-1", target_id="req-1"))
-    graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="req-1", target_id="cap-1"))
-    graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="cap-1", target_id="comp-1"))
+    graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="req-1", target_id="step-1"))
     
     # Chain 2
     goal2 = Goal(id="goal-2", name="Goal 2", statement="Second goal")
     req2 = Requirement(id="req-2", name="Requirement 2")
-    cap2 = Capability(id="cap-2", name="Capability 2")
-    comp2 = Component(id="comp-2", name="Component 2")
+    step2 = Step(id="step-2", name="Step 2")
     
     graph.add_node(goal2)
     graph.add_node(req2)
-    graph.add_node(cap2)
-    graph.add_node(comp2)
+    graph.add_node(step2)
     
     graph.add_edge(BaseEdge(edge_type="SATISFIED_BY", source_id="goal-2", target_id="req-2"))
-    graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="req-2", target_id="cap-2"))
-    graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="cap-2", target_id="comp-2"))
+    graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="req-2", target_id="step-2"))
     
     return graph
 

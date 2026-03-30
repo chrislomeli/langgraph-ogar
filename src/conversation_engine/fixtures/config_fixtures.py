@@ -2,7 +2,7 @@
 Shared configuration and state fixtures for tests and examples.
 
 Provides reusable factories for:
-- IntegrityRule instances (goal→req, req→cap)
+- IntegrityRule instances (goal→req)
 - DomainConfig instances (sample, partial, minimal)
 - ConversationState dicts with sensible defaults
 - ArchitecturalOntologyContext from various graph shapes
@@ -38,24 +38,24 @@ def goal_req_rule() -> IntegrityRule:
     )
 
 
-def req_cap_rule() -> IntegrityRule:
-    """Every requirement must have ≥1 REALIZED_BY → capability."""
+def req_step_rule() -> IntegrityRule:
+    """Every requirement must have ≥1 REALIZED_BY → step."""
     return IntegrityRule(
-        id="rule-req-cap",
-        name="Requirement → Capability",
-        description="Every requirement must have at least one capability",
+        id="rule-req-step",
+        name="Requirement → Step",
+        description="Every requirement must have at least one step",
         applies_to_node_type="requirement",
         rule_type="minimum_outgoing_edge_count",
-        target_node_types=["capability"],
+        target_node_types=["step"],
         minimum_count=1,
         severity="medium",
-        failure_message_template="Requirement '{subject_name}' has no capabilities.",
+        failure_message_template="Requirement '{subject_name}' has no steps.",
     )
 
 
 def standard_rules() -> List[IntegrityRule]:
-    """The two standard integrity rules used across tests and examples."""
-    return [goal_req_rule(), req_cap_rule()]
+    """The standard integrity rules used across tests and examples."""
+    return [goal_req_rule(), req_step_rule()]
 
 
 # ── DomainConfig factories ───────────────────────────────────────────

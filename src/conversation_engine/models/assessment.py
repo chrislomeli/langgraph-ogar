@@ -15,12 +15,11 @@ from conversation_engine.models.rule_node import Severity
 AssessmentType = Literal[
     "missing_goal_coverage",
     "missing_requirement_realization",
-    "missing_capability_realization",
     "missing_component_dependencies",
     "orphan_decision",
     "orphan_constraint",
     "undocumented_feature",
-    "capability_without_design",
+    "component_without_design",
     "use_case_without_scenarios",
 ]
 

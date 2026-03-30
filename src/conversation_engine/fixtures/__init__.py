@@ -13,13 +13,18 @@ from conversation_engine.fixtures.graph_fixtures import (
 )
 from conversation_engine.fixtures.config_fixtures import (
     goal_req_rule,
-    req_cap_rule,
+    req_step_rule,
     standard_rules,
     sample_config,
     partial_config,
     make_context,
     minimal_state,
     make_state,
+)
+from conversation_engine.fixtures.project_fixtures import (
+    conversation_engine_meta_spec,
+    infer_meta_spec_from_paths,
+    load_project_spec_fixture_json,
 )
 
 __all__ = [
@@ -31,11 +36,15 @@ __all__ = [
     "create_minimal_graph",
     # Config fixtures
     "goal_req_rule",
-    "req_cap_rule",
+    "req_step_rule",
     "standard_rules",
     "sample_config",
     "partial_config",
     "make_context",
     "minimal_state",
     "make_state",
+    # ProjectSpecification fixtures
+    "conversation_engine_meta_spec",
+    "infer_meta_spec_from_paths",
+    "load_project_spec_fixture_json",
 ]

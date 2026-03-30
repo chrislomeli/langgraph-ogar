@@ -8,6 +8,7 @@ Coverage:
 """
 from __future__ import annotations
 
+import json
 from typing import Dict, List
 
 import pytest
@@ -141,6 +142,9 @@ class TestKnowledgeGraphTransforms:
     def test_build_grap_from_domain(self):
         config = _full_config()
         project_graph = project_to_graph(config)
+
+        spec = config.project_spec
+        c = json.dumps(spec.model_dump())
         # todo add better asserts by type
 
         def check_node(node_type: NodeType, expected: int):
@@ -150,16 +154,14 @@ class TestKnowledgeGraphTransforms:
         project = project_graph.get_nodes_by_type(NodeType.PROJECT)
         goals = project_graph.get_nodes_by_type(NodeType.GOAL)
         reqs = project_graph.get_nodes_by_type(NodeType.REQUIREMENT)
-        capabilities = project_graph.get_nodes_by_type(NodeType.CAPABILITY)
-        components = project_graph.get_nodes_by_type(NodeType.COMPONENT)
+        steps = project_graph.get_nodes_by_type(NodeType.STEP)
         rules = project_graph.get_nodes_by_type(NodeType.RULE)
         quizes = project_graph.get_nodes_by_type(NodeType.QUIZ)
 
         assert len(project) == 1
         assert len(goals) == 2
         assert len(reqs) == 2
-        assert len(capabilities) == 2
-        assert len(components) == 2
+        assert len(steps) == 2
         assert len(rules) == 1
         assert len(quizes) == 2
 

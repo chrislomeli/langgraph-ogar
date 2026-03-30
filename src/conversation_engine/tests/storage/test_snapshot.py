@@ -17,8 +17,7 @@ from conversation_engine.models.base import BaseEdge
 from conversation_engine.models.nodes import (
     Goal,
     Requirement,
-    Capability,
-    Component,
+    Step,
     Constraint,
     Dependency,
 )
@@ -28,8 +27,7 @@ from conversation_engine.storage.snapshot import (
     ProjectSnapshot,
     GoalSpec,
     RequirementSpec,
-    CapabilitySpec,
-    ComponentSpec,
+    StepSpec,
     ConstraintSpec,
     DependencySpec,
 )
@@ -51,7 +49,7 @@ from conversation_engine.models.rule_node import IntegrityRule
 # ── Helpers ────────────────────────────────────────────────────────
 
 def _sample_snapshot() -> ProjectSnapshot:
-    """A realistic snapshot with all six entity types."""
+    """A realistic snapshot with all five entity types."""
     return ProjectSnapshot(
         project_name="acme",
         goals=[
@@ -65,17 +63,10 @@ def _sample_snapshot() -> ProjectSnapshot:
                 description="Support OAuth 2.0 providers",
             ),
         ],
-        capabilities=[
-            CapabilitySpec(
-                name="SSO Login",
-                requirement_refs=["OAuth Support"],
-                description="Single sign-on via OAuth",
-            ),
-        ],
-        components=[
-            ComponentSpec(
+        steps=[
+            StepSpec(
                 name="Auth Service",
-                capability_refs=["SSO Login"],
+                requirement_refs=["OAuth Support"],
                 dependency_refs=["Redis"],
                 description="Handles authentication flows",
             ),
@@ -104,8 +95,7 @@ class TestProjectSnapshot:
         assert snap.project_name == "acme"
         assert len(snap.goals) == 1
         assert len(snap.requirements) == 1
-        assert len(snap.capabilities) == 1
-        assert len(snap.components) == 1
+        assert len(snap.steps) == 1
         assert len(snap.constraints) == 1
         assert len(snap.dependencies) == 1
 
@@ -139,15 +129,14 @@ class TestSnapshotToGraph:
 
     def test_creates_all_nodes(self):
         graph = snapshot_to_graph(_sample_snapshot())
-        assert graph.node_count() == 6  # goal, req, cap, comp, cstr, dep
+        assert graph.node_count() == 5  # goal, req, step, cstr, dep
 
     def test_creates_correct_edges(self):
         graph = snapshot_to_graph(_sample_snapshot())
         # Goal --SATISFIED_BY--> Requirement
-        # Requirement --REALIZED_BY--> Capability
-        # Capability --REALIZED_BY--> Component
-        # Component --DEPENDS_ON--> Dependency
-        assert graph.edge_count() == 4
+        # Requirement --REALIZED_BY--> Step
+        # Step --DEPENDS_ON--> Dependency
+        assert graph.edge_count() == 3
 
     def test_goal_node(self):
         graph = snapshot_to_graph(_sample_snapshot())
@@ -169,19 +158,14 @@ class TestSnapshotToGraph:
         edge = graph.get_edge("goal-user-authentication", "SATISFIED_BY", "req-oauth-support")
         assert edge is not None
 
-    def test_realized_by_req_to_cap(self):
+    def test_realized_by_req_to_comp(self):
         graph = snapshot_to_graph(_sample_snapshot())
-        edge = graph.get_edge("req-oauth-support", "REALIZED_BY", "cap-sso-login")
-        assert edge is not None
-
-    def test_realized_by_cap_to_comp(self):
-        graph = snapshot_to_graph(_sample_snapshot())
-        edge = graph.get_edge("cap-sso-login", "REALIZED_BY", "comp-auth-service")
+        edge = graph.get_edge("req-oauth-support", "REALIZED_BY", "step-auth-service")
         assert edge is not None
 
     def test_depends_on_edge(self):
         graph = snapshot_to_graph(_sample_snapshot())
-        edge = graph.get_edge("comp-auth-service", "DEPENDS_ON", "dep-redis")
+        edge = graph.get_edge("step-auth-service", "DEPENDS_ON", "dep-redis")
         assert edge is not None
 
     def test_constraint_node(self):
@@ -191,15 +175,15 @@ class TestSnapshotToGraph:
         assert isinstance(node, Constraint)
         assert node.statement == "Must comply with GDPR"
 
-    def test_component_has_no_dependencies_flag(self):
+    def test_step_has_no_dependencies_flag(self):
         snap = ProjectSnapshot(
             project_name="test",
-            components=[
-                ComponentSpec(name="Standalone", has_no_dependencies=True),
+            steps=[
+                StepSpec(name="Standalone", has_no_dependencies=True),
             ],
         )
         graph = snapshot_to_graph(snap)
-        node = graph.get_node_typed("comp-standalone", Component)
+        node = graph.get_node_typed("step-standalone", Step)
         assert node is not None
         assert node.has_no_dependencies is True
 
@@ -218,32 +202,21 @@ class TestSnapshotToGraph:
         with pytest.raises(SnapshotConversionError, match="unknown goal"):
             snapshot_to_graph(snap)
 
-    def test_bad_requirement_ref_raises(self):
+    def test_bad_requirement_ref_on_step_raises(self):
         snap = ProjectSnapshot(
             project_name="test",
-            goals=[GoalSpec(name="G1", statement="g")],
-            capabilities=[
-                CapabilitySpec(name="C1", requirement_refs=["Nonexistent"]),
+            steps=[
+                StepSpec(name="X", requirement_refs=["Nonexistent"]),
             ],
         )
         with pytest.raises(SnapshotConversionError, match="unknown requirement"):
             snapshot_to_graph(snap)
 
-    def test_bad_capability_ref_raises(self):
-        snap = ProjectSnapshot(
-            project_name="test",
-            components=[
-                ComponentSpec(name="X", capability_refs=["Nonexistent"]),
-            ],
-        )
-        with pytest.raises(SnapshotConversionError, match="unknown capability"):
-            snapshot_to_graph(snap)
-
     def test_bad_dependency_ref_raises(self):
         snap = ProjectSnapshot(
             project_name="test",
-            components=[
-                ComponentSpec(name="X", dependency_refs=["Nonexistent"]),
+            steps=[
+                StepSpec(name="X", dependency_refs=["Nonexistent"]),
             ],
         )
         with pytest.raises(SnapshotConversionError, match="unknown dependency"):
@@ -262,7 +235,7 @@ class TestSnapshotToGraph:
         edges = graph.get_outgoing_edges("goal-g", "SATISFIED_BY")
         assert len(edges) == 2
 
-    def test_capability_with_multiple_requirement_refs(self):
+    def test_step_with_multiple_requirement_refs(self):
         snap = ProjectSnapshot(
             project_name="test",
             goals=[GoalSpec(name="G", statement="g")],
@@ -270,14 +243,14 @@ class TestSnapshotToGraph:
                 RequirementSpec(name="R1", goal_ref="G"),
                 RequirementSpec(name="R2", goal_ref="G"),
             ],
-            capabilities=[
-                CapabilitySpec(name="C", requirement_refs=["R1", "R2"]),
+            steps=[
+                StepSpec(name="S", requirement_refs=["R1", "R2"]),
             ],
         )
         graph = snapshot_to_graph(snap)
-        # R1 --REALIZED_BY--> C  and  R2 --REALIZED_BY--> C
-        assert graph.get_edge("req-r1", "REALIZED_BY", "cap-c") is not None
-        assert graph.get_edge("req-r2", "REALIZED_BY", "cap-c") is not None
+        # R1 --REALIZED_BY--> S  and  R2 --REALIZED_BY--> S
+        assert graph.get_edge("req-r1", "REALIZED_BY", "step-s") is not None
+        assert graph.get_edge("req-r2", "REALIZED_BY", "step-s") is not None
 
 
 # ── graph_to_snapshot ──────────────────────────────────────────────
@@ -303,15 +276,15 @@ class TestGraphToSnapshot:
         assert snap.goals == []
         assert snap.requirements == []
 
-    def test_component_depends_on(self):
+    def test_step_depends_on(self):
         graph = KnowledgeGraph()
-        graph.add_node(Component(id="c1", name="Comp1"))
+        graph.add_node(Step(id="s1", name="Step1"))
         graph.add_node(Dependency(id="d1", name="Dep1"))
-        graph.add_edge(BaseEdge(edge_type="DEPENDS_ON", source_id="c1", target_id="d1"))
+        graph.add_edge(BaseEdge(edge_type="DEPENDS_ON", source_id="s1", target_id="d1"))
 
         snap = graph_to_snapshot("test", graph)
-        assert len(snap.components) == 1
-        assert snap.components[0].dependency_refs == ["Dep1"]
+        assert len(snap.steps) == 1
+        assert snap.steps[0].dependency_refs == ["Dep1"]
 
     def test_unknown_node_types_silently_skipped(self):
         """Nodes the snapshot doesn't model (e.g. Feature) are skipped."""
@@ -338,17 +311,15 @@ class TestRoundTrip:
         assert restored.project_name == original.project_name
         assert len(restored.goals) == len(original.goals)
         assert len(restored.requirements) == len(original.requirements)
-        assert len(restored.capabilities) == len(original.capabilities)
-        assert len(restored.components) == len(original.components)
+        assert len(restored.steps) == len(original.steps)
         assert len(restored.constraints) == len(original.constraints)
         assert len(restored.dependencies) == len(original.dependencies)
 
         # Check content
         assert restored.goals[0].name == "User Authentication"
         assert restored.requirements[0].goal_ref == "User Authentication"
-        assert restored.capabilities[0].requirement_refs == ["OAuth Support"]
-        assert restored.components[0].capability_refs == ["SSO Login"]
-        assert restored.components[0].dependency_refs == ["Redis"]
+        assert restored.steps[0].requirement_refs == ["OAuth Support"]
+        assert restored.steps[0].dependency_refs == ["Redis"]
 
     def test_empty_round_trip(self):
         original = ProjectSnapshot(project_name="empty")
@@ -559,9 +530,8 @@ class TestProjectSpecTool:
         restored = out.payload
         assert restored.goals[0].name == original.goals[0].name
         assert restored.requirements[0].goal_ref == original.requirements[0].goal_ref
-        assert restored.capabilities[0].requirement_refs == original.capabilities[0].requirement_refs
-        assert restored.components[0].capability_refs == original.components[0].capability_refs
-        assert restored.components[0].dependency_refs == original.components[0].dependency_refs
+        assert restored.steps[0].requirement_refs == original.steps[0].requirement_refs
+        assert restored.steps[0].dependency_refs == original.steps[0].dependency_refs
 
     def test_tool_works_with_local_tool_client(self):
         """Integration: tool works through LocalToolClient envelope."""

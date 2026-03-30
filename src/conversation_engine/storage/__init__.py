@@ -20,8 +20,7 @@ from conversation_engine.models.project_spec import (
     ProjectSnapshot,  # backwards-compatible alias
     GoalSpec,
     RequirementSpec,
-    CapabilitySpec,
-    ComponentSpec,
+    StepSpec,
     ConstraintSpec,
     DependencySpec,
 )
@@ -42,8 +41,7 @@ __all__ = [
     "ProjectSnapshot",
     "GoalSpec",
     "RequirementSpec",
-    "CapabilitySpec",
-    "ComponentSpec",
+    "StepSpec",
     "ConstraintSpec",
     "DependencySpec",
     "snapshot_to_graph",

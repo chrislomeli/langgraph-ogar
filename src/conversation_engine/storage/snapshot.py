@@ -7,8 +7,7 @@ This shim ensures existing imports keep working.
 from conversation_engine.models.project_spec import (  # noqa: F401
     GoalSpec,
     RequirementSpec,
-    CapabilitySpec,
-    ComponentSpec,
+    StepSpec,
     ConstraintSpec,
     DependencySpec,
     ProjectSpecification,

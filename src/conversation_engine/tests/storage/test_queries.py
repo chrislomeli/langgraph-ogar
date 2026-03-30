@@ -9,7 +9,7 @@ These tests validate graph analysis patterns:
 """
 import pytest
 
-from conversation_engine.models import Goal, Requirement, Capability, Component
+from conversation_engine.models import Goal, Requirement, Step
 from conversation_engine.models.base import BaseEdge
 from conversation_engine.storage import KnowledgeGraph, GraphQueries
 
@@ -42,18 +42,18 @@ class TestNeighborQueries:
         graph = KnowledgeGraph()
         queries = GraphQueries(graph)
         
-        comp = Component(id="comp-1", name="Component")
-        dep = Component(id="dep-1", name="Dependency")
-        other = Component(id="other-1", name="Other")
+        step = Step(id="step-1", name="Step")
+        dep = Step(id="dep-1", name="Dependency")
+        other = Step(id="other-1", name="Other")
         
-        graph.add_node(comp)
+        graph.add_node(step)
         graph.add_node(dep)
         graph.add_node(other)
         
-        graph.add_edge(BaseEdge(edge_type="DEPENDS_ON", source_id="comp-1", target_id="dep-1"))
-        graph.add_edge(BaseEdge(edge_type="INFORMS", source_id="comp-1", target_id="other-1"))
+        graph.add_edge(BaseEdge(edge_type="DEPENDS_ON", source_id="step-1", target_id="dep-1"))
+        graph.add_edge(BaseEdge(edge_type="INFORMS", source_id="step-1", target_id="other-1"))
         
-        depends_neighbors = queries.get_neighbors_out("comp-1", edge_type="DEPENDS_ON")
+        depends_neighbors = queries.get_neighbors_out("step-1", edge_type="DEPENDS_ON")
         assert len(depends_neighbors) == 1
         assert depends_neighbors[0].id == "dep-1"
     
@@ -63,19 +63,19 @@ class TestNeighborQueries:
         queries = GraphQueries(graph)
         
         req = Requirement(id="req-1", name="Requirement")
-        cap1 = Capability(id="cap-1", name="Capability 1")
-        cap2 = Capability(id="cap-2", name="Capability 2")
+        step1 = Step(id="step-1", name="Step 1")
+        step2 = Step(id="step-2", name="Step 2")
         
         graph.add_node(req)
-        graph.add_node(cap1)
-        graph.add_node(cap2)
+        graph.add_node(step1)
+        graph.add_node(step2)
         
-        graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="req-1", target_id="cap-1"))
-        graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="req-1", target_id="cap-2"))
+        graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="req-1", target_id="step-1"))
+        graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="req-1", target_id="step-2"))
         
-        cap_neighbors = queries.get_neighbors_out("req-1", target_type="capability")
-        assert len(cap_neighbors) == 2
-        assert all(isinstance(n, Capability) for n in cap_neighbors)
+        step_neighbors = queries.get_neighbors_out("req-1", target_type="step")
+        assert len(step_neighbors) == 2
+        assert all(isinstance(n, Step) for n in step_neighbors)
     
     def test_get_neighbors_in(self):
         """Test getting incoming neighbors."""
@@ -177,14 +177,14 @@ class TestPathTraversal:
         
         goal = Goal(id="goal-1", name="Goal", statement="Test")
         req = Requirement(id="req-1", name="Requirement")
-        cap = Capability(id="cap-1", name="Capability")
+        step = Step(id="step-1", name="Step")
         
         graph.add_node(goal)
         graph.add_node(req)
-        graph.add_node(cap)
+        graph.add_node(step)
         
         graph.add_edge(BaseEdge(edge_type="SATISFIED_BY", source_id="goal-1", target_id="req-1"))
-        graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="req-1", target_id="cap-1"))
+        graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="req-1", target_id="step-1"))
         
         paths = queries.traverse_path("goal-1", ["SATISFIED_BY", "REALIZED_BY"])
         
@@ -192,7 +192,7 @@ class TestPathTraversal:
         assert len(paths[0]) == 3
         assert paths[0][0].id == "goal-1"
         assert paths[0][1].id == "req-1"
-        assert paths[0][2].id == "cap-1"
+        assert paths[0][2].id == "step-1"
     
     def test_traverse_branching_path(self):
         """Test traversing a path with branches."""
@@ -202,20 +202,20 @@ class TestPathTraversal:
         goal = Goal(id="goal-1", name="Goal", statement="Test")
         req1 = Requirement(id="req-1", name="Requirement 1")
         req2 = Requirement(id="req-2", name="Requirement 2")
-        cap1 = Capability(id="cap-1", name="Capability 1")
-        cap2 = Capability(id="cap-2", name="Capability 2")
+        step1 = Step(id="step-1", name="Step 1")
+        step2 = Step(id="step-2", name="Step 2")
         
         graph.add_node(goal)
         graph.add_node(req1)
         graph.add_node(req2)
-        graph.add_node(cap1)
-        graph.add_node(cap2)
+        graph.add_node(step1)
+        graph.add_node(step2)
         
-        # Goal -> 2 Requirements -> 2 Capabilities each
+        # Goal -> 2 Requirements -> 2 Steps each
         graph.add_edge(BaseEdge(edge_type="SATISFIED_BY", source_id="goal-1", target_id="req-1"))
         graph.add_edge(BaseEdge(edge_type="SATISFIED_BY", source_id="goal-1", target_id="req-2"))
-        graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="req-1", target_id="cap-1"))
-        graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="req-2", target_id="cap-2"))
+        graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="req-1", target_id="step-1"))
+        graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="req-2", target_id="step-2"))
         
         paths = queries.traverse_path("goal-1", ["SATISFIED_BY", "REALIZED_BY"])
         
@@ -229,14 +229,14 @@ class TestPathTraversal:
         
         goal = Goal(id="goal-1", name="Goal", statement="Test")
         req = Requirement(id="req-1", name="Requirement")
-        cap = Capability(id="cap-1", name="Capability")
+        step = Step(id="step-1", name="Step")
         
         graph.add_node(goal)
         graph.add_node(req)
-        graph.add_node(cap)
+        graph.add_node(step)
         
         graph.add_edge(BaseEdge(edge_type="SATISFIED_BY", source_id="goal-1", target_id="req-1"))
-        graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="req-1", target_id="cap-1"))
+        graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="req-1", target_id="step-1"))
         
         # Limit to depth 1
         paths = queries.traverse_path("goal-1", ["SATISFIED_BY", "REALIZED_BY"], max_depth=1)
@@ -251,27 +251,23 @@ class TestPathTraversal:
         
         goal = Goal(id="goal-1", name="Goal", statement="Test")
         req = Requirement(id="req-1", name="Requirement")
-        cap = Capability(id="cap-1", name="Capability")
-        comp = Component(id="comp-1", name="Component")
+        step = Step(id="step-1", name="Step")
         isolated = Goal(id="goal-2", name="Isolated", statement="Test")
         
         graph.add_node(goal)
         graph.add_node(req)
-        graph.add_node(cap)
-        graph.add_node(comp)
+        graph.add_node(step)
         graph.add_node(isolated)
         
         graph.add_edge(BaseEdge(edge_type="SATISFIED_BY", source_id="goal-1", target_id="req-1"))
-        graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="req-1", target_id="cap-1"))
-        graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="cap-1", target_id="comp-1"))
+        graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="req-1", target_id="step-1"))
         
         reachable = queries.find_reachable_nodes("goal-1")
         
-        assert len(reachable) == 4  # goal, req, cap, comp
+        assert len(reachable) == 3  # goal, req, step
         assert "goal-1" in reachable
         assert "req-1" in reachable
-        assert "cap-1" in reachable
-        assert "comp-1" in reachable
+        assert "step-1" in reachable
         assert "goal-2" not in reachable
     
     def test_find_reachable_nodes_filtered_by_edge_type(self):
@@ -281,22 +277,22 @@ class TestPathTraversal:
         
         goal = Goal(id="goal-1", name="Goal", statement="Test")
         req = Requirement(id="req-1", name="Requirement")
-        cap = Capability(id="cap-1", name="Capability")
+        step = Step(id="step-1", name="Step")
         
         graph.add_node(goal)
         graph.add_node(req)
-        graph.add_node(cap)
+        graph.add_node(step)
         
         graph.add_edge(BaseEdge(edge_type="SATISFIED_BY", source_id="goal-1", target_id="req-1"))
-        graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="req-1", target_id="cap-1"))
+        graph.add_edge(BaseEdge(edge_type="REALIZED_BY", source_id="req-1", target_id="step-1"))
         
         # Only follow SATISFIED_BY edges
         reachable = queries.find_reachable_nodes("goal-1", edge_types=["SATISFIED_BY"])
         
-        assert len(reachable) == 2  # goal, req (not cap)
+        assert len(reachable) == 2  # goal, req (not step)
         assert "goal-1" in reachable
         assert "req-1" in reachable
-        assert "cap-1" not in reachable
+        assert "step-1" not in reachable
 
 
 class TestCoverageAnalysis:

@@ -19,7 +19,7 @@ Usage:
     quiz = [
         FactualQuiz(
             question="What node types exist in the knowledge graph?",
-            expected_answer="goal, requirement, capability, component",
+            expected_answer="goal, requirement, step",
             weight=1.0,
             min_score=0.5,
         ),

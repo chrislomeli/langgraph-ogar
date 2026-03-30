@@ -1,0 +1,25 @@
+{
+  "project_name": "agentic-framework",
+  "goals": [
+    {
+      "name": "project-context",
+      "statement": "the agent has access to goals, requirements, capabilities, components, constraints, and dependencies"
+    }
+  ],
+  "requirements": [
+    {
+      "name": "tool-registry",
+      "goal_ref": "project-context",
+      "requirement_type": null,
+      "description": "encapsulate tools in a registry that provides both discovery and execution"
+    }
+  ],
+  "capabilities": [],
+  "components": [],
+  "constraints": [    {
+      "name": "langgraph",
+      "goal_ref": "project-context",
+      "statement": "use langgraph as the framework for building the agents"
+    }],
+  "dependencies": []
+}

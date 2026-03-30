@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.project_planner.conftest import requires_memgraph
+from archive.tests.project_planner.conftest import requires_memgraph
 from project_planner.persistence import commands, queries
 
 

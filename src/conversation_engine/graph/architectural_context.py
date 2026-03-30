@@ -35,9 +35,8 @@ from conversation_engine.infrastructure.llm.architectural_quiz import (
 
 _RULE_ID_TO_FINDING_TYPE: Dict[str, str] = {
     "rule-goal-req": "missing_goal_coverage",
-    "rule-req-cap": "missing_requirement_realization",
-    "rule-cap-comp": "missing_capability_realization",
-    "rule-comp-dep": "missing_component_dependencies",
+    "rule-req-step": "missing_requirement_realization",
+    "rule-step-dep": "missing_step_dependencies",
 }
 
 
@@ -67,7 +66,7 @@ class ArchitecturalOntologyContext:
         # self._query_patterns = config.query_patterns or []
 
     @classmethod
-    def from_components(
+    def from_spec_parts(
         cls,
         graph: KnowledgeGraph,
         rules: List[IntegrityRule],

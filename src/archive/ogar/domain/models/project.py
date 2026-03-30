@@ -72,6 +72,7 @@ class UncertaintyItem(BaseModel):
 # ---- WorkItem summary at project layer ----
 WorkItemStatus = Literal["todo", "in_progress", "done", "blocked"]
 
+
 class ProjectWorkItem(BaseModel):
     """
     Project-level view of work items (NOT the template-step WorkItem model).

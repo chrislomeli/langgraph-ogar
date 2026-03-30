@@ -23,6 +23,7 @@ class NodeType(str, Enum):
     DECISION = "decision"
     CONSTRAINT = "constraint"
     COMPONENT = "component"
+    STEP = "step"
     DEPENDENCY = "dependency"
     DOCUMENTATION_ARTIFACT = "documentation_artifact"
     RULE = "rule"
@@ -34,8 +35,8 @@ class NodeType(str, Enum):
 EdgeType = Literal[
     "HAS_GOAL",
     "HAS_REQUIREMENT",
-    "HAS_CAPABILITY",
     "HAS_COMPONENT",
+    "HAS_STEP",
     "HAS_DEPENDENCY",
     "HAS_CONSTRAINT",
     "HAS_RULE",
@@ -46,6 +47,7 @@ EdgeType = Literal[
     "SATISFIED_BY",
     "REALIZED_BY",
     "DEPENDS_ON",
+    "BLOCKED_BY",
     "CONSTRAINS",
     "DESCRIBED_BY",
     "DOCUMENTED_BY",

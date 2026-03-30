@@ -251,8 +251,8 @@ def make_project_spec_tool(project_store: ProjectStore) -> ToolSpec:
             "  READ(key)            — retrieve an existing project as a ProjectSpecification\n"
             "  UPDATE(key, payload) — full-replace the spec (rules/quiz/prompt preserved)\n"
             "  DELETE(key)          — remove a project by name\n\n"
-            "The payload is a ProjectSpecification with goals, requirements, capabilities, "
-            "components, constraints, and dependencies. Use name-based references "
+            "The payload is a ProjectSpecification with goals, requirements, "
+            "steps, constraints, and dependencies. Use name-based references "
             "(e.g. a requirement's goal_ref is the goal's name, not an ID)."
         ),
         input_model=ProjectGraphInput,

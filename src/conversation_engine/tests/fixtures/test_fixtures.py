@@ -20,18 +20,18 @@ class TestMinimalGraph:
         """Test that minimal graph is created correctly."""
         graph = create_minimal_graph()
         
-        assert graph.node_count() == 3
-        assert graph.edge_count() == 2
+        assert graph.node_count() == 2
+        assert graph.edge_count() == 1
     
     def test_has_simple_chain(self):
         """Test that minimal graph has a simple chain."""
         graph = create_minimal_graph()
         queries = GraphQueries(graph)
         
-        paths = queries.traverse_path("goal-1", ["SATISFIED_BY", "REALIZED_BY"])
+        paths = queries.traverse_path("goal-1", ["SATISFIED_BY"])
         
         assert len(paths) == 1
-        assert len(paths[0]) == 3
+        assert len(paths[0]) == 2
 
 
 class TestGraphWithGaps:
@@ -56,14 +56,14 @@ class TestGraphWithGaps:
         assert len(orphans) == 2
     
     def test_has_orphan_requirements(self):
-        """Test that some requirements have no capabilities."""
+        """Test that some requirements have no outgoing REALIZED_BY edges."""
         graph = create_graph_with_gaps()
         queries = GraphQueries(graph)
         
         orphans = queries.find_nodes_missing_edge_type("requirement", "REALIZED_BY", direction="out")
         
-        # Should have 1 orphan requirement (req-2)
-        assert len(orphans) == 1
+        # Both requirements have no REALIZED_BY edges (no components linked)
+        assert len(orphans) == 2
     
     def test_coverage_is_partial(self):
         """Test that coverage is not 100%."""
@@ -126,8 +126,8 @@ class TestCompleteGraph:
         
         assert coverage == 1.0
     
-    def test_all_requirements_have_capabilities(self):
-        """Test that all requirements have capabilities."""
+    def test_all_requirements_have_components(self):
+        """Test that all requirements have components."""
         graph = create_graph_complete()
         queries = GraphQueries(graph)
         
@@ -141,10 +141,10 @@ class TestCompleteGraph:
         queries = GraphQueries(graph)
         
         # Should be able to traverse from goal to component
-        paths = queries.traverse_path("goal-1", ["SATISFIED_BY", "REALIZED_BY", "REALIZED_BY"])
+        paths = queries.traverse_path("goal-1", ["SATISFIED_BY", "REALIZED_BY"])
         
         assert len(paths) > 0
-        assert all(len(path) == 4 for path in paths)
+        assert all(len(path) == 3 for path in paths)
 
 
 class TestPartialCoverageGraph:

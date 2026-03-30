@@ -10,9 +10,8 @@ tool handler and by the ``ProjectStore`` pipeline.
 
 Edge wiring rules (source --EDGE_TYPE--> target):
     Goal        --SATISFIED_BY-->  Requirement
-    Requirement --REALIZED_BY-->   Capability
-    Capability  --REALIZED_BY-->   Component
-    Component   --DEPENDS_ON-->    Dependency
+    Requirement --REALIZED_BY-->   Step
+    Step        --DEPENDS_ON-->    Dependency
     Constraint  --CONSTRAINS-->    (any node, not wired automatically)
 """
 from __future__ import annotations
@@ -26,8 +25,7 @@ from conversation_engine.models.domain_config import DomainConfig
 from conversation_engine.models.nodes import (
     Goal,
     Requirement,
-    Capability,
-    Component,
+    Step,
     Constraint,
     Dependency, Project,
 )
@@ -37,8 +35,7 @@ from conversation_engine.models.project_spec import (
     ProjectSpecification,  # backwards-compatible alias
     GoalSpec,
     RequirementSpec,
-    CapabilitySpec,
-    ComponentSpec,
+    StepSpec,
     ConstraintSpec,
     DependencySpec,
 )
@@ -80,8 +77,7 @@ def project_to_graph(project: DomainConfig) -> KnowledgeGraph:
     # ── Name → ID registries (built as nodes are added) ────────────
     goal_ids: Dict[str, str] = {}
     req_ids: Dict[str, str] = {}
-    cap_ids: Dict[str, str] = {}
-    comp_ids: Dict[str, str] = {}
+    step_ids: Dict[str, str] = {}
     dep_ids: Dict[str, str] = {}
 
     # ── rules ──────────────────────────────────────────────────────
@@ -160,36 +156,7 @@ def project_to_graph(project: DomainConfig) -> KnowledgeGraph:
                     target_id=nid,
                 ))
 
-        # ── Capabilities (→ Requirement via REALIZED_BY) ───────────────
-        for spec in project_spec.capabilities or []:
-            nid = _create_id("cap")
-            cap_ids[spec.name] = nid
-            graph.add_node(Capability(
-                id=nid,
-                name=spec.name,
-                description=spec.description,
-            ))
-            # Wire: wire to project
-            graph.add_edge(BaseEdge(
-                edge_type="HAS_CAPABILITY",
-                source_id=project_id,
-                target_id=nid,
-            ))
-
-            for ref in spec.requirement_refs:
-                req_id = req_ids.get(ref)
-                if req_id is None:
-                    raise SnapshotConversionError(
-                        f"Capability '{spec.name}' references unknown requirement '{ref}'. "
-                        f"Known requirements: {sorted(req_ids)}"
-                    )
-                graph.add_edge(BaseEdge(
-                    edge_type="REALIZED_BY",
-                    source_id=req_id,
-                    target_id=nid,
-                ))
-
-        # ── Dependencies (added before components so refs resolve) ─────
+        # ── Dependencies (added before steps so refs resolve) ─────
         for spec in project_spec.dependencies or []:
             nid = _create_id("dep")
             dep_ids[spec.name] = nid
@@ -205,40 +172,40 @@ def project_to_graph(project: DomainConfig) -> KnowledgeGraph:
                 target_id=nid,
             ))
 
-        # ── Components (→ Capability via REALIZED_BY, → Dependency via DEPENDS_ON)
-        for spec in project_spec.components or []:
-            nid = _create_id("comp")
-            comp_ids[spec.name] = nid
-            graph.add_node(Component(
+        # ── Steps (→ Requirement via REALIZED_BY, → Dependency via DEPENDS_ON)
+        for spec in project_spec.steps or []:
+            nid = _create_id("step")
+            step_ids[spec.name] = nid
+            graph.add_node(Step(
                 id=nid,
                 name=spec.name,
                 description=spec.description,
                 has_no_dependencies=spec.has_no_dependencies,
             ))
-            # Wire: wire to project  todo - wire components to a goal instead of at the project level?
+            # Wire: wire to project  todo - wire steps to a goal instead of at the project level?
             graph.add_edge(BaseEdge(
-                edge_type="HAS_COMPONENT",
+                edge_type="HAS_STEP",
                 source_id=project_id,
                 target_id=nid,
             ))
 
-            for ref in spec.capability_refs:
-                cap_id = cap_ids.get(ref)
-                if cap_id is None:
+            for ref in spec.requirement_refs:
+                req_id = req_ids.get(ref)
+                if req_id is None:
                     raise SnapshotConversionError(
-                        f"Component '{spec.name}' references unknown capability '{ref}'. "
-                        f"Known capabilities: {sorted(cap_ids)}"
+                        f"Step '{spec.name}' references unknown requirement '{ref}'. "
+                        f"Known requirements: {sorted(req_ids)}"
                     )
                 graph.add_edge(BaseEdge(
                     edge_type="REALIZED_BY",
-                    source_id=cap_id,
+                    source_id=req_id,
                     target_id=nid,
                 ))
             for ref in spec.dependency_refs:
                 dep_id = dep_ids.get(ref)
                 if dep_id is None:
                     raise SnapshotConversionError(
-                        f"Component '{spec.name}' references unknown dependency '{ref}'. "
+                        f"Step '{spec.name}' references unknown dependency '{ref}'. "
                         f"Known dependencies: {sorted(dep_ids)}"
                     )
                 graph.add_edge(BaseEdge(
@@ -251,7 +218,7 @@ def project_to_graph(project: DomainConfig) -> KnowledgeGraph:
         for spec in project_spec.constraints or []:
             nid = _create_id("cstr")
             graph.add_node(Constraint(id=nid, name=spec.name, statement=spec.statement))
-            # Wire: wire to project  todo - wire components to a goal instead of at the project level?
+            # Wire: wire to project  todo - wire steps to a goal instead of at the project level?
             graph.add_edge(BaseEdge(
                 edge_type="HAS_CONSTRAINT",
                 source_id=project_id,
@@ -321,8 +288,7 @@ def graph_to_snapshot(project_name: str, graph: KnowledgeGraph) -> ProjectSpecif
     # ── Collect nodes by type ──────────────────────────────────────
     goals_by_id: Dict[str, Goal] = {}
     reqs_by_id: Dict[str, Requirement] = {}
-    caps_by_id: Dict[str, Capability] = {}
-    comps_by_id: Dict[str, Component] = {}
+    steps_by_id: Dict[str, Step] = {}
     deps_by_id: Dict[str, Dependency] = {}
     constraints_by_id: Dict[str, Constraint] = {}
 
@@ -331,10 +297,8 @@ def graph_to_snapshot(project_name: str, graph: KnowledgeGraph) -> ProjectSpecif
             goals_by_id[node.id] = node
         elif isinstance(node, Requirement):
             reqs_by_id[node.id] = node
-        elif isinstance(node, Capability):
-            caps_by_id[node.id] = node
-        elif isinstance(node, Component):
-            comps_by_id[node.id] = node
+        elif isinstance(node, Step):
+            steps_by_id[node.id] = node
         elif isinstance(node, Dependency):
             deps_by_id[node.id] = node
         elif isinstance(node, Constraint):
@@ -347,29 +311,19 @@ def graph_to_snapshot(project_name: str, graph: KnowledgeGraph) -> ProjectSpecif
         if edge.target_id in reqs_by_id and edge.source_id in goals_by_id:
             req_to_goal[edge.target_id] = goals_by_id[edge.source_id].name
 
-    # Capability → requirement names  (Req --REALIZED_BY--> Cap)
-    cap_to_reqs: Dict[str, List[str]] = {}
+    # Step → requirement names  (Req --REALIZED_BY--> Step)
+    step_to_reqs: Dict[str, List[str]] = {}
     for edge in graph.get_edges_by_type("REALIZED_BY"):
-        if edge.target_id in caps_by_id and edge.source_id in reqs_by_id:
-            cap_to_reqs.setdefault(edge.target_id, []).append(
+        if edge.target_id in steps_by_id and edge.source_id in reqs_by_id:
+            step_to_reqs.setdefault(edge.target_id, []).append(
                 reqs_by_id[edge.source_id].name
             )
-        elif edge.target_id in comps_by_id and edge.source_id in caps_by_id:
-            pass  # handled below in comp_to_caps
 
-    # Component → capability names  (Cap --REALIZED_BY--> Comp)
-    comp_to_caps: Dict[str, List[str]] = {}
-    for edge in graph.get_edges_by_type("REALIZED_BY"):
-        if edge.target_id in comps_by_id and edge.source_id in caps_by_id:
-            comp_to_caps.setdefault(edge.target_id, []).append(
-                caps_by_id[edge.source_id].name
-            )
-
-    # Component → dependency names  (Comp --DEPENDS_ON--> Dep)
-    comp_to_deps: Dict[str, List[str]] = {}
+    # Step → dependency names  (Step --DEPENDS_ON--> Dep)
+    step_to_deps: Dict[str, List[str]] = {}
     for edge in graph.get_edges_by_type("DEPENDS_ON"):
-        if edge.source_id in comps_by_id and edge.target_id in deps_by_id:
-            comp_to_deps.setdefault(edge.source_id, []).append(
+        if edge.source_id in steps_by_id and edge.target_id in deps_by_id:
+            step_to_deps.setdefault(edge.source_id, []).append(
                 deps_by_id[edge.target_id].name
             )
 
@@ -389,24 +343,15 @@ def graph_to_snapshot(project_name: str, graph: KnowledgeGraph) -> ProjectSpecif
         for r in reqs_by_id.values()
     ]
 
-    cap_specs = [
-        CapabilitySpec(
-            name=c.name,
-            requirement_refs=cap_to_reqs.get(c.id, []),
-            description=c.description,
+    step_specs = [
+        StepSpec(
+            name=s.name,
+            requirement_refs=step_to_reqs.get(s.id, []),
+            dependency_refs=step_to_deps.get(s.id, []),
+            has_no_dependencies=s.has_no_dependencies,
+            description=s.description,
         )
-        for c in caps_by_id.values()
-    ]
-
-    comp_specs = [
-        ComponentSpec(
-            name=c.name,
-            capability_refs=comp_to_caps.get(c.id, []),
-            dependency_refs=comp_to_deps.get(c.id, []),
-            has_no_dependencies=c.has_no_dependencies,
-            description=c.description,
-        )
-        for c in comps_by_id.values()
+        for s in steps_by_id.values()
     ]
 
     constraint_specs = [
@@ -423,8 +368,7 @@ def graph_to_snapshot(project_name: str, graph: KnowledgeGraph) -> ProjectSpecif
         project_name=project_name,
         goals=goal_specs,
         requirements=req_specs,
-        capabilities=cap_specs,
-        components=comp_specs,
+        steps=step_specs,
         constraints=constraint_specs,
         dependencies=dep_specs,
     )

@@ -95,7 +95,7 @@ class TestCallLLMStub:
             context={
                 "findings": [
                     {"message": "Goal has no requirements"},
-                    {"message": "Missing capability link"},
+                    {"message": "Missing component link"},
                 ]
             },
         )

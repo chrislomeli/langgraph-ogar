@@ -2,7 +2,7 @@
 Traceability models for mapping relationships between layers.
 
 These models capture the explicit traceability chains:
-  Goal → Requirement → Capability → Component → Dependency
+  Goal → Requirement → Step → Dependency
 """
 from __future__ import annotations
 
@@ -21,34 +21,28 @@ class GoalRequirementTrace(BaseModel):
     )
 
 
-class RequirementCapabilityTrace(BaseModel):
+class RequirementStepTrace(BaseModel):
     """
-    Maps a requirement to the capabilities that realize it.
+    Maps a requirement to the steps that realize it.
     """
     requirement_id: str = Field(..., description="Requirement identifier")
-    capability_ids: List[str] = Field(
+    step_ids: List[str] = Field(
         default_factory=list,
-        description="List of capability IDs that realize this requirement"
+        description="List of step IDs that realize this requirement"
     )
 
 
-class CapabilityComponentTrace(BaseModel):
+class StepDependencyTrace(BaseModel):
     """
-    Maps a capability to the components that implement it.
+    Maps a step to its dependencies.
     """
-    capability_id: str = Field(..., description="Capability identifier")
-    component_ids: List[str] = Field(
-        default_factory=list,
-        description="List of component IDs that implement this capability"
-    )
-
-
-class ComponentDependencyTrace(BaseModel):
-    """
-    Maps a component to its dependencies.
-    """
-    component_id: str = Field(..., description="Component identifier")
+    step_id: str = Field(..., description="Step identifier")
     dependency_ids: List[str] = Field(
         default_factory=list,
         description="List of dependency IDs (external systems, libraries, etc.)"
     )
+
+
+# ── Backwards-compatible aliases ─────────────────────────────────
+RequirementComponentTrace = RequirementStepTrace
+ComponentDependencyTrace = StepDependencyTrace
