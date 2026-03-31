@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Demo: Create "Twinkle Twinkle Little Star" (single part) in the graph database.
+Demo: Create "Twinkle Twinkle Little Harmony" (melody + bass) in the graph database.
 
 Run after setting up the schema.
 """
 
 import sys
-sys.path.insert(0, "../src")
+sys.path.insert(0, "../../src")
 
 from symbolic_music.domain import (
     CompositionSpec,
@@ -29,28 +29,25 @@ from symbolic_music.persistence import GraphMusicWriter
 
 
 def rt(n: int, d: int = 1) -> RationalTime:
-    """Shorthand for RationalTime."""
     return RationalTime(n=n, d=d)
 
 
 def p(midi: int, spelling: str = None) -> Pitch:
-    """Shorthand for Pitch."""
     return Pitch(midi=midi, spelling_hint=spelling)
 
 
-# MIDI notes
 C4, D4, E4, F4, G4, A4 = 60, 62, 64, 65, 67, 69
 
 
-def create_twinkle_star():
-    """Create Twinkle Twinkle Little Star in C major."""
+def create_twinkle_harmony():
+    """Create Twinkle with melody and bass tracks."""
     store = GraphMusicWriter()
     
-    print("Creating 'Twinkle Twinkle Little Star'...")
+    print("Creating 'Twinkle Twinkle Little Harmony'...")
     
     ts = TimeSignature(num=4, den=4)
-    Q = rt(1, 4)  # quarter
-    H = rt(1, 2)  # half
+    Q = rt(1, 4)
+    H = rt(1, 2)
     
     # Section A
     section_a_sid = store.create_section("Verse A")
@@ -124,13 +121,14 @@ def create_twinkle_star():
     print(f"  Created Section B: {svid_b[:8]}...")
     
     # Composition
-    comp_cid = store.create_composition("Twinkle Twinkle Little Star")
+    comp_cid = store.create_composition("Twinkle Twinkle Little Harmony")
     
     meter_map = MeterMap(changes=(MeterChange(at_bar=1, ts=ts),))
     tempo_map = TempoMap(changes=(
         TempoChange(at_bar=1, at_beat=1, tempo=TempoValue(bpm=rt(100), beat_unit_den=4)),
     ))
     
+    # Melody track
     melody_track = TrackSpec(
         track_id="melody-track",
         config=TrackConfig(
@@ -146,11 +144,27 @@ def create_twinkle_star():
         ),
     )
     
+    # Bass track (down an octave)
+    bass_track = TrackSpec(
+        track_id="bass-track",
+        config=TrackConfig(
+            name="Bass",
+            instrument_hint="bass_guitar",
+            midi_channel=2,
+            clef="bass",
+        ),
+        placements=(
+            SectionPlacement(section_version_id=svid_a, start_bar=1, repeats=1, transpose_semitones=-12, role="bass"),
+            SectionPlacement(section_version_id=svid_b, start_bar=5, repeats=1, transpose_semitones=-12, role="bass"),
+            SectionPlacement(section_version_id=svid_a, start_bar=9, repeats=1, transpose_semitones=-12, role="bass"),
+        ),
+    )
+    
     composition = CompositionSpec(
-        title="Twinkle Twinkle Little Star",
+        title="Twinkle Twinkle Little Harmony",
         meter_map=meter_map,
         tempo_map=tempo_map,
-        tracks=(melody_track,),
+        tracks=(melody_track, bass_track),
     )
     
     cvid = store.commit_composition_version(comp_cid, composition)
@@ -158,11 +172,12 @@ def create_twinkle_star():
     print(f"\nCreated composition:")
     print(f"  Composition ID: {comp_cid[:8]}...")
     print(f"  Version ID: {cvid[:8]}...")
+    print(f"  Tracks: Melody + Bass")
     print(f"  Structure: A-B-A")
     
     return comp_cid
 
 
 if __name__ == "__main__":
-    create_twinkle_star()
+    create_twinkle_harmony()
     print("\nExplore in Memgraph Lab (http://localhost:7444)")

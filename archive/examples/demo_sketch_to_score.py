@@ -18,7 +18,7 @@ Usage:
 """
 
 import sys
-sys.path.insert(0, "../src")
+sys.path.insert(0, "../../src")
 
 from intent.sketch_models import Sketch, VoiceHint
 from intent.planner import DeterministicPlanner

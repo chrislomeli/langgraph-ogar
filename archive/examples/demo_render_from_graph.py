@@ -13,7 +13,7 @@ Usage:
 """
 
 import sys
-sys.path.insert(0, "../src")
+sys.path.insert(0, "../../src")
 
 from symbolic_music.persistence import GraphMusicReader
 from symbolic_music.rendering import render_composition
