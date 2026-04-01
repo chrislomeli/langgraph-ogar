@@ -31,8 +31,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+llm = [
+    "langchain-openai>=0.2",
+]
 dev = [
     "pytest>=7.0",
+    "pytest-asyncio>=0.23",
     "pytest-cov>=4.0",
 ]
 
@@ -48,3 +52,4 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+asyncio_mode = "auto"
