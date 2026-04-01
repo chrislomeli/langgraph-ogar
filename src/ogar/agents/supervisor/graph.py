@@ -28,10 +28,6 @@ Usage:
   llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
   graph = build_supervisor_graph(llm=llm)
 
-  # With optional HITL gate:
-  from ogar.hitl.gate import ConsoleApprovalGate
-  graph = build_supervisor_graph(gate=ConsoleApprovalGate())
-
 The Send API pattern
 ─────────────────────
 fan_out_to_clusters returns a list of Send() objects — one per cluster.
@@ -48,11 +44,9 @@ This is the key LangGraph skill this graph demonstrates:
 
 from __future__ import annotations
 
-import functools
 import json
 import logging
 from typing import Any, Literal, List, Optional
-from uuid import uuid4
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -64,7 +58,6 @@ from ogar.actuators.base import ActuatorCommand
 from ogar.agents.cluster.graph import cluster_agent_graph
 from ogar.agents.cluster.state import ClusterAgentState
 from ogar.agents.supervisor.state import SupervisorState
-from ogar.hitl.gate import ApprovalRequest, HumanApprovalGate
 from ogar.tools.supervisor_tools import (
     SUPERVISOR_TOOLS,
     clear_supervisor_tool_state,
@@ -104,6 +97,7 @@ Situation summary: {situation_summary}
 Based on the situation assessment, decide what actuator commands to issue.
 Available command types:
   - "alert": Send alerts to operators (payload: {{"message": "...", "recipients": [...]}})
+  - "notify": Send async notification via Slack/PagerDuty (payload: {{"channel": "slack"|"pagerduty", "message": "...", "urgency": "high"|"medium"|"low"}})
   - "escalate": Escalate to higher authority (payload: {{"reason": "...", "urgency": "high"|"medium"}})
   - "suppress": Suppress a known false positive (payload: {{"finding_ids": [...], "reason": "..."}})
   - "drone_task": Deploy a drone for closer inspection (payload: {{"target_cluster": "...", "task": "inspect"|"monitor"}})
@@ -114,7 +108,7 @@ Respond with a JSON object (and nothing else):
 {{
   "commands": [
     {{
-      "command_type": "alert" | "escalate" | "suppress" | "drone_task",
+      "command_type": "alert" | "notify" | "escalate" | "suppress" | "drone_task",
       "cluster_id": "target-cluster-id",
       "priority": 1-5,
       "payload": {{ ... }}
@@ -232,13 +226,12 @@ def decide_actions(state: SupervisorState) -> dict:
     """
     Stub decide_actions node — used when no LLM is provided.
 
-    Returns no commands and no approval needed.
+    Returns no commands.
     """
     logger.info("Supervisor decide_actions — STUB")
 
     return {
         "pending_commands": [],
-        "requires_approval": False,
         "status": "dispatching",
     }
 
@@ -407,7 +400,6 @@ def _parse_commands(state: SupervisorState) -> dict:
     if last_ai is None:
         return {
             "pending_commands": [],
-            "requires_approval": False,
             "status": "dispatching",
         }
 
@@ -422,7 +414,6 @@ def _parse_commands(state: SupervisorState) -> dict:
         logger.warning("Supervisor: failed to parse LLM decision: %s", exc)
         return {
             "pending_commands": [],
-            "requires_approval": False,
             "status": "dispatching",
         }
 
@@ -442,54 +433,10 @@ def _parse_commands(state: SupervisorState) -> dict:
         except (KeyError, Exception) as exc:
             logger.warning("Supervisor: skipping invalid command: %s", exc)
 
-    # High-priority commands (4+) may require approval.
-    requires_approval = any(c.priority >= 4 for c in commands)
-
-    logger.info(
-        "Supervisor decided %d command(s), requires_approval=%s",
-        len(commands),
-        requires_approval,
-    )
+    logger.info("Supervisor decided %d command(s)", len(commands))
 
     return {
         "pending_commands": commands,
-        "requires_approval": requires_approval,
-        "status": "dispatching",
-    }
-
-
-async def hitl_pause(state: SupervisorState, *, gate: HumanApprovalGate) -> dict:
-    """
-    Pause execution for human approval.
-
-    This node is only reached when decide_actions sets requires_approval=True
-    AND a gate was provided at build time.
-
-    The gate parameter is injected at graph compile time via partial().
-    The graph itself does not hold a reference to the gate —
-    this keeps the graph state serialisable (important for checkpointing).
-    """
-    request_id = str(uuid4())
-    logger.info("Supervisor requesting human approval — request_id=%s", request_id)
-
-    request = ApprovalRequest(
-        request_id=request_id,
-        cluster_id=",".join(state.get("active_cluster_ids", [])),
-        situation_summary=state.get("situation_summary", "No summary available"),
-        proposed_action=f"Execute {len(state.get('pending_commands', []))} command(s)",
-        confidence=0.9,
-        context={"finding_count": len(state.get("cluster_findings", []))},
-    )
-
-    result = await gate.wait_for_approval(request)
-
-    return {
-        "approval_request_id": request_id,
-        "approval_decision": {
-            "approved": result.approved,
-            "reason": result.reason,
-            "modifications": result.modifications,
-        },
         "status": "dispatching",
     }
 
@@ -498,19 +445,8 @@ def dispatch_commands(state: SupervisorState) -> dict:
     """
     Send actuator commands — placeholder for real actuator dispatch.
 
-    Checks the approval decision if one is required.
-    If approved (or no approval needed), dispatches pending_commands.
-
     TODO: Wire to ActuatorRegistry or publish to commands.actuators Kafka topic.
     """
-    decision = state.get("approval_decision")
-    if decision is not None and not decision.get("approved", False):
-        logger.info(
-            "Supervisor: human REJECTED action — reason=%r. Aborting dispatch.",
-            decision.get("reason"),
-        )
-        return {"status": "complete", "pending_commands": []}
-
     commands = state.get("pending_commands", [])
     logger.info("Supervisor dispatching %d command(s)", len(commands))
 
@@ -555,39 +491,21 @@ def route_after_decide_llm(
     return "parse_commands"
 
 
-def _make_route_after_decide(has_gate: bool):
+def route_after_decide(
+    state: SupervisorState,
+) -> Literal["dispatch_commands", "__end__"]:
     """
-    Factory for the route_after_decide conditional edge.
-
-    When a gate is provided, high-priority commands route to hitl_pause.
-    When no gate is provided, all commands go directly to dispatch.
+    Route after decide/parse_commands — error exits, otherwise dispatch.
     """
-    if has_gate:
-        def route_after_decide(
-            state: SupervisorState,
-        ) -> Literal["hitl_pause", "dispatch_commands", "__end__"]:
-            if state.get("status") == "error":
-                return "__end__"
-            if state.get("requires_approval"):
-                logger.info("Supervisor routing to HITL pause for human approval")
-                return "hitl_pause"
-            return "dispatch_commands"
-    else:
-        def route_after_decide(
-            state: SupervisorState,
-        ) -> Literal["dispatch_commands", "__end__"]:
-            if state.get("status") == "error":
-                return "__end__"
-            return "dispatch_commands"
-
-    return route_after_decide
+    if state.get("status") == "error":
+        return "__end__"
+    return "dispatch_commands"
 
 
 # ── Graph builder ─────────────────────────────────────────────────────────────
 
 def build_supervisor_graph(
     llm: Optional[BaseChatModel] = None,
-    gate: Optional[HumanApprovalGate] = None,
 ):
     """
     Compile and return the supervisor graph.
@@ -597,10 +515,6 @@ def build_supervisor_graph(
     llm : Optional LangChain chat model.  When provided, assess_situation
           and decide_actions use LLM + ToolNode in a ReAct loop.  When
           None (default), deterministic stubs are used instead.
-
-    gate : Optional HumanApprovalGate.  When provided, high-priority
-           commands route through hitl_pause for human approval.
-           When None (default), all commands dispatch directly.
     """
     builder = StateGraph(SupervisorState)
 
@@ -633,9 +547,8 @@ def build_supervisor_graph(
         builder.add_conditional_edges("decide_actions", route_after_decide_llm)
         builder.add_edge("decide_tool_node", "decide_actions")
 
-        # parse_commands → route_after_decide (HITL or dispatch)
-        route_fn = _make_route_after_decide(has_gate=gate is not None)
-        builder.add_conditional_edges("parse_commands", route_fn)
+        # parse_commands → dispatch or end
+        builder.add_conditional_edges("parse_commands", route_after_decide)
 
         logger.info("Supervisor graph compiled (LLM mode)")
     else:
@@ -646,18 +559,9 @@ def build_supervisor_graph(
         builder.add_edge("run_cluster_agent", "assess_situation")
         builder.add_edge("assess_situation", "decide_actions")
 
-        route_fn = _make_route_after_decide(has_gate=gate is not None)
-        builder.add_conditional_edges("decide_actions", route_fn)
+        builder.add_conditional_edges("decide_actions", route_after_decide)
 
         logger.info("Supervisor graph compiled (stub mode)")
-
-    # ── HITL (optional) ──────────────────────────────────────────────
-    if gate is not None:
-        builder.add_node(
-            "hitl_pause",
-            functools.partial(hitl_pause, gate=gate),
-        )
-        builder.add_edge("hitl_pause", "dispatch_commands")
 
     builder.add_edge("dispatch_commands", END)
 

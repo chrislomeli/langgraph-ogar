@@ -14,7 +14,7 @@ from ogar.agents.supervisor.graph import (
     assess_situation,
     decide_actions,
     dispatch_commands,
-    _make_route_after_decide,
+    route_after_decide,
     _parse_assessment,
     _parse_commands,
     route_after_assess_llm,
@@ -22,7 +22,6 @@ from ogar.agents.supervisor.graph import (
     build_supervisor_graph,
 )
 from ogar.agents.cluster.state import AnomalyFinding
-from ogar.hitl.stub import ConsoleApprovalGate
 from ogar.transport.schemas import SensorEvent
 
 
@@ -44,9 +43,6 @@ def _make_supervisor_state(**overrides) -> dict:
         "cluster_findings": [],
         "messages": [],
         "pending_commands": [],
-        "requires_approval": False,
-        "approval_request_id": None,
-        "approval_decision": None,
         "situation_summary": None,
         "status": "idle",
         "error_message": None,
@@ -131,75 +127,37 @@ class TestDecideActions:
         state = _make_supervisor_state()
         result = decide_actions(state)
         assert result["pending_commands"] == []
-        assert result["requires_approval"] is False
         assert result["status"] == "dispatching"
 
 
 class TestDispatchCommands:
-    def test_dispatch_without_approval(self):
-        state = _make_supervisor_state(
-            pending_commands=[],
-            approval_decision=None,
-        )
+    def test_dispatch_empty(self):
+        state = _make_supervisor_state(pending_commands=[])
         result = dispatch_commands(state)
         assert result["status"] == "complete"
 
-    def test_dispatch_with_rejection(self):
+    def test_dispatch_with_commands(self):
         state = _make_supervisor_state(
             pending_commands=[{"cmd": "test"}],
-            approval_decision={"approved": False, "reason": "nope"},
-        )
-        result = dispatch_commands(state)
-        assert result["status"] == "complete"
-        assert result["pending_commands"] == []
-
-    def test_dispatch_with_approval(self):
-        state = _make_supervisor_state(
-            pending_commands=[{"cmd": "test"}],
-            approval_decision={"approved": True},
         )
         result = dispatch_commands(state)
         assert result["status"] == "complete"
 
 
 class TestRouteAfterDecide:
-    def test_routes_to_dispatch_no_approval_with_gate(self):
-        route_fn = _make_route_after_decide(has_gate=True)
-        state = _make_supervisor_state(
-            requires_approval=False, status="dispatching"
-        )
-        assert route_fn(state) == "dispatch_commands"
-
-    def test_routes_to_hitl_when_approval_needed(self):
-        route_fn = _make_route_after_decide(has_gate=True)
-        state = _make_supervisor_state(
-            requires_approval=True, status="dispatching"
-        )
-        assert route_fn(state) == "hitl_pause"
+    def test_routes_to_dispatch(self):
+        state = _make_supervisor_state(status="dispatching")
+        assert route_after_decide(state) == "dispatch_commands"
 
     def test_routes_to_end_on_error(self):
-        route_fn = _make_route_after_decide(has_gate=True)
         state = _make_supervisor_state(status="error")
-        assert route_fn(state) == "__end__"
-
-    def test_routes_to_dispatch_without_gate(self):
-        route_fn = _make_route_after_decide(has_gate=False)
-        state = _make_supervisor_state(
-            requires_approval=True, status="dispatching"
-        )
-        # Without a gate, always goes to dispatch regardless of requires_approval
-        assert route_fn(state) == "dispatch_commands"
-
-    def test_no_gate_routes_to_end_on_error(self):
-        route_fn = _make_route_after_decide(has_gate=False)
-        state = _make_supervisor_state(status="error")
-        assert route_fn(state) == "__end__"
+        assert route_after_decide(state) == "__end__"
 
 
 # ── Graph build test ─────────────────────────────────────────────────────────
 
 class TestSupervisorGraph:
-    def test_build_stub_no_gate(self):
+    def test_build_stub(self):
         graph = build_supervisor_graph()
         assert graph is not None
         assert hasattr(graph, "invoke")
@@ -209,16 +167,7 @@ class TestSupervisorGraph:
         assert "assess_situation" in node_names
         assert "decide_actions" in node_names
         assert "dispatch_commands" in node_names
-        # No HITL node when gate is not provided
         assert "hitl_pause" not in node_names
-
-    def test_build_stub_with_gate(self):
-        gate = ConsoleApprovalGate()
-        graph = build_supervisor_graph(gate=gate)
-        node_names = set(graph.get_graph().nodes.keys())
-        assert "hitl_pause" in node_names
-        assert "assess_situation" in node_names
-        assert "decide_actions" in node_names
 
 
 class TestLLMRouters:
@@ -291,15 +240,15 @@ class TestParseCommands:
         cmd = result["pending_commands"][0]
         assert cmd.command_type == "alert"
         assert cmd.cluster_id == "c1"
-        assert result["requires_approval"] is False
 
-    def test_high_priority_requires_approval(self):
+    def test_high_priority_command(self):
         content = '{"commands": [{"command_type": "escalate", "cluster_id": "c1", "priority": 5, "payload": {}}], "reasoning": "urgent"}'
         state = _make_supervisor_state(
             messages=[AIMessage(content=content)]
         )
         result = _parse_commands(state)
-        assert result["requires_approval"] is True
+        assert len(result["pending_commands"]) == 1
+        assert result["pending_commands"][0].priority == 5
 
     def test_no_commands(self):
         content = '{"commands": [], "reasoning": "all clear"}'
@@ -308,7 +257,6 @@ class TestParseCommands:
         )
         result = _parse_commands(state)
         assert result["pending_commands"] == []
-        assert result["requires_approval"] is False
 
     def test_invalid_json(self):
         state = _make_supervisor_state(

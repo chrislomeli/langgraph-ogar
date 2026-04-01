@@ -9,8 +9,7 @@ The supervisor is the top-level agent.  It:
   1. Receives findings from cluster agents (via Send API fan-out).
   2. Correlates findings across clusters.
   3. Decides which actuator commands to issue.
-  4. Optionally pauses for human approval before high-impact actions.
-  5. Dispatches commands to actuators.
+  4. Dispatches commands to actuators (including async notifications).
 
 State design
 ────────────
@@ -37,7 +36,7 @@ messages: Standard add_messages from LangGraph — appends, never overwrites.
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Dict, List, Literal, Optional
+from typing import Annotated, List, Literal, Optional
 
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
@@ -98,22 +97,9 @@ class SupervisorState(TypedDict):
     # Set by decide_actions node, consumed by dispatch_commands node.
     pending_commands: List[ActuatorCommand]
 
-    # ── Human-in-the-loop ─────────────────────────────────────────────
-    # Set to True when the supervisor wants human approval before acting.
-    # The HITL gate suspends execution until respond() is called.
-    requires_approval: bool
-
-    # request_id for the pending ApprovalRequest, if any.
-    # Used to match the approval response to the right pending request.
-    approval_request_id: Optional[str]
-
-    # The human's decision after approval (approve/reject + reason).
-    # Set by the HITL gate after respond() is called.
-    approval_decision: Optional[Dict[str, Any]]
-
     # ── Situation summary ─────────────────────────────────────────────
     # Human-readable summary of what the supervisor determined.
-    # Written by assess_situation, used in approval requests and audit log.
+    # Written by assess_situation, used in notifications and audit log.
     situation_summary: Optional[str]
 
     # ── Control ───────────────────────────────────────────────────────
@@ -122,7 +108,6 @@ class SupervisorState(TypedDict):
         "aggregating",      # Waiting for cluster agents to report in
         "assessing",        # LLM correlating cross-cluster findings
         "deciding",         # Choosing actions
-        "awaiting_approval",# Paused for human decision
         "dispatching",      # Sending commands to actuators
         "complete",
         "error",
