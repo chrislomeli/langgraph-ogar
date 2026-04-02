@@ -76,7 +76,7 @@ Now we'll wire everything together: **World Engine → Sensors → Queue → Age
 
 ```python
 import random
-from ogar.world.scenarios.wildfire_basic import create_basic_wildfire
+from ogar.domains.wildfire.scenarios import create_basic_wildfire
 
 # Set seed for reproducibility
 random.seed(42)
@@ -86,14 +86,14 @@ engine = create_basic_wildfire()
 
 print(f"World: {engine.grid.rows}×{engine.grid.cols} grid")
 print(f"Fire ignition at (7, 2)")
-print(f"Weather: {engine.weather.temperature_c}°C, {engine.weather.humidity_pct}% humidity")
+print(f"Weather: {engine.environment.temperature_c}°C, {engine.environment.humidity_pct}% humidity")
 ```
 
 **Output:**
 ```
 World: 10×10 grid
 Fire ignition at (7, 2)
-Weather: 35°C, 15% humidity
+Weather: 38°C, 12% humidity
 ```
 
 ---
@@ -101,7 +101,7 @@ Weather: 35°C, 15% humidity
 ### Step 2: Create Sensors
 
 ```python
-from ogar.sensors.world_sensors import (
+from ogar.domains.wildfire.sensors import (
     TemperatureSensor,
     SmokeSensor,
     WindSensor,
@@ -339,6 +339,7 @@ async def main():
     # 1. Create the world
     engine = create_basic_wildfire()
     print(f"World: {engine.grid.rows}×{engine.grid.cols} grid, fire at (7,2)")
+    print(f"Weather: {engine.environment.temperature_c}°C, {engine.environment.humidity_pct}% humidity")
     
     # 2. Create sensors
     CLUSTER_ID = "cluster-north"
@@ -423,8 +424,8 @@ async def main():
     print("=" * 60)
     
     # 9. Ground truth vs findings
-    summary = engine.grid.summary()
-    print(f"\nGround truth: {summary['burning_cells']} cells burning")
+    snap = engine.history[-1]
+    print(f"\nGround truth: {snap.domain_summary['burning_cells']} cells burning")
     print(f"Agent detected: {len(findings_log)} anomalies")
 
 
@@ -560,11 +561,13 @@ After the pipeline runs, compare what the agent detected vs. what actually happe
 
 ```python
 # Ground truth
+from ogar.domains.wildfire.cell_state import FireState
+
 snapshot = engine.history[-1]  # Last tick
 burning_cells = [
     (r, c) for r in range(engine.grid.rows)
     for c in range(engine.grid.cols)
-    if engine.grid.get_cell(r, c).fire_state == FireState.BURNING
+    if engine.grid.get_cell(r, c).cell_state.fire_state == FireState.BURNING
 ]
 
 print(f"Ground truth: {len(burning_cells)} cells burning")
@@ -691,8 +694,8 @@ You now have a complete understanding of the pipeline! Here's what to explore ne
 ```python
 import asyncio
 import random
-from ogar.world.scenarios.wildfire_basic import create_basic_wildfire
-from ogar.sensors.world_sensors import TemperatureSensor, SmokeSensor
+from ogar.domains.wildfire.scenarios import create_basic_wildfire
+from ogar.domains.wildfire.sensors import TemperatureSensor, SmokeSensor
 from ogar.sensors.publisher import SensorPublisher
 from ogar.transport.queue import SensorEventQueue
 from ogar.bridge.consumer import EventBridgeConsumer
@@ -757,7 +760,7 @@ ground_truth = engine.history[-1]
 agent_findings = findings_log
 
 # Evaluate
-print(f"Ground truth: {ground_truth.summary}")
+print(f"Ground truth: {ground_truth.domain_summary['cell_summary']}")
 print(f"Agent detected: {len(agent_findings)} anomalies")
 ```
 

@@ -143,17 +143,17 @@ class TestPublisherEngineTick:
     async def test_publisher_ticks_engine(self):
         from ogar.sensors.publisher import SensorPublisher
         from ogar.sensors.base import SensorBase
-        from ogar.world.engine import WorldEngine
-        from ogar.world.grid import TerrainGrid
-        from ogar.world.weather import WeatherState
-        from ogar.world.fire_spread.heuristic import FireSpreadHeuristic
+        from ogar.domains.wildfire.physics import FirePhysicsModule
+        from ogar.domains.wildfire.environment import FireEnvironmentState
+        from ogar.world.generic_engine import GenericWorldEngine
+        from ogar.world.generic_grid import GenericTerrainGrid
 
-        grid = TerrainGrid(rows=3, cols=3)
-        weather = WeatherState(temp_drift=0.0, humidity_drift=0.0,
-                               wind_speed_drift=0.0, wind_direction_drift=0.0,
-                               pressure_drift=0.0)
-        engine = WorldEngine(grid=grid, weather=weather,
-                             fire_spread=FireSpreadHeuristic(base_probability=0.0))
+        physics = FirePhysicsModule(base_probability=0.0)
+        grid = GenericTerrainGrid(rows=3, cols=3, initial_state_factory=physics.initial_cell_state)
+        env = FireEnvironmentState(temp_drift=0.0, humidity_drift=0.0,
+                                   wind_speed_drift=0.0, wind_direction_drift=0.0,
+                                   pressure_drift=0.0)
+        engine = GenericWorldEngine(grid=grid, environment=env, physics=physics)
 
         class _Stub(SensorBase):
             source_type = "stub"

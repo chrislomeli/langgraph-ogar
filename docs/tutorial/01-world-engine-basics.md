@@ -2,22 +2,25 @@
 
 ## What is the World Engine?
 
-The **World Engine** is a wildfire simulator that creates a fake world for your AI agents to practice on. Think of it like a video game level, but instead of a player controlling a character, you have AI agents trying to detect and respond to wildfires.
+The **World Engine** is a domain-agnostic simulation framework. For the wildfire scenario it creates a fake world for your AI agents to practice on — but the same framework can be reused for any domain (ocean monitoring, disease tracking, etc.) by plugging in a different physics module.
+
+Think of it like a video game engine: the engine provides the tick loop and grid, while the "game" (wildfire, ocean current, etc.) is a pluggable domain skin.
 
 ### The Big Picture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  World Engine (the "game")                                  │
+│  GenericWorldEngine[FireCellState]                          │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
-│  │   Terrain    │    │   Weather    │    │ Fire Spread  │  │
-│  │   Grid       │    │   State      │    │   Rules      │  │
-│  │  (the map)   │    │ (temp, wind) │    │ (physics)    │  │
+│  │  Generic     │    │  Fire        │    │  Fire        │  │
+│  │  Terrain     │    │  Environment │    │  Physics     │  │
+│  │  Grid        │    │  State       │    │  Module      │  │
+│  │  (the map)   │    │ (temp, wind) │    │ (spread)     │  │
 │  └──────────────┘    └──────────────┘    └──────────────┘  │
 │                                                              │
 │  Every "tick" (like a game frame):                          │
-│    1. Weather changes a little (wind shifts, temp drifts)   │
-│    2. Fire spreads to new cells (or existing fires die out) │
+│    1. Environment changes (wind shifts, temp drifts)        │
+│    2. Physics runs (fire spreads, cells extinguish)         │
 │    3. A "ground truth snapshot" is saved (the answer key)   │
 └─────────────────────────────────────────────────────────────┘
                             ↓
@@ -41,9 +44,9 @@ The **World Engine** is a wildfire simulator that creates a fake world for your 
 
 ### 1. **Terrain Grid** — The Map
 
-A 2D grid of cells, like a chessboard. Each cell is a small patch of land (imagine 100m × 100m).
+A 2D grid of cells, like a chessboard. Each cell is a small patch of land (imagine 100m × 100m). The grid is generic — it holds any `CellState` type, typed via `Generic[C]`.
 
-**What each cell tracks:**
+**For the wildfire domain, each cell (`FireCellState`) tracks:**
 - **Terrain type**: Forest, grassland, rock, water, or urban
 - **Vegetation**: How much burnable stuff is there (0.0 = bare rock, 1.0 = dense forest)
 - **Fuel moisture**: How wet the fuel is (0.0 = bone dry, 1.0 = soaking wet)
@@ -51,21 +54,31 @@ A 2D grid of cells, like a chessboard. Each cell is a small patch of land (imagi
 - **Fire state**: UNBURNED, BURNING, or BURNED
 - **Fire intensity**: How hot the fire is (0.0–1.0)
 
+Cell state is **immutable** — instead of mutating a cell, you create a new state and inject it.
+
 **Example:**
 ```python
-from ogar.world.grid import TerrainGrid, TerrainType
+from ogar.domains.wildfire.physics import FirePhysicsModule
+from ogar.domains.wildfire.cell_state import FireCellState, TerrainType
+from ogar.world.generic_grid import GenericTerrainGrid
+
+# Create a physics module (provides the initial cell state factory)
+physics = FirePhysicsModule()
 
 # Create a 10×10 grid
-grid = TerrainGrid(rows=10, cols=10)
+grid = GenericTerrainGrid(rows=10, cols=10, initial_state_factory=physics.initial_cell_state)
 
-# Set cell (5, 5) to be forest
-cell = grid.get_cell(5, 5)
-cell.terrain_type = TerrainType.FOREST
-cell.vegetation = 0.8      # Dense forest
-cell.fuel_moisture = 0.3   # Fairly dry
+# Set cell (5, 5) to be dense, dry forest
+forest_state = FireCellState(
+    terrain_type=TerrainType.FOREST,
+    vegetation=0.8,
+    fuel_moisture=0.3,
+)
+grid.update_cell_state(5, 5, forest_state)
 
-# Start a fire there
-cell.ignite(tick=0, intensity=0.7)
+# Start a fire there (returns a new immutable state)
+ignited = grid.get_cell(5, 5).cell_state.ignited(tick=0, intensity=0.7)
+grid.update_cell_state(5, 5, ignited)
 ```
 
 **Coordinates:**
@@ -75,9 +88,9 @@ cell.ignite(tick=0, intensity=0.7)
 
 ---
 
-### 2. **Weather State** — Environmental Conditions
+### 2. **Environment State** — Environmental Conditions
 
-Weather affects how fire spreads. Hot, dry, windy conditions = fast fire spread.
+The environment captures ambient conditions that affect physics. It is a pluggable `EnvironmentState` — for wildfire that's `FireEnvironmentState`.
 
 **What it tracks:**
 - **Temperature** (°C)
@@ -88,89 +101,73 @@ Weather affects how fire spreads. Hot, dry, windy conditions = fast fire spread.
 
 **Example:**
 ```python
-from ogar.world.weather import WeatherState
+from ogar.domains.wildfire.environment import FireEnvironmentState
 
 # Hot, dry, windy day — perfect for wildfires
-weather = WeatherState(
-    temperature_c=35,      # Hot
-    humidity_pct=15,       # Very dry
-    wind_speed_mps=8,      # Strong wind
-    wind_direction_deg=225 # Blowing from the south-west
+env = FireEnvironmentState(
+    temperature_c=35,       # Hot
+    humidity_pct=15,        # Very dry
+    wind_speed_mps=8,       # Strong wind
+    wind_direction_deg=225, # Blowing from the south-west
 )
 ```
 
-**Weather evolves over time:**
-Each tick, the weather drifts slightly (temperature goes up/down, wind shifts direction). This is controlled by a `drift_rate` parameter.
+**Environment evolves over time:**
+Each tick, the environment drifts slightly (temperature goes up/down, wind shifts direction). Controlled by `*_drift` parameters.
 
 ---
 
-### 3. **Fire Spread Module** — The Physics
+### 3. **Physics Module** — The Rules
 
-This is the "game engine" that decides which cells catch fire each tick.
+This is the "game engine" that decides how state evolves each tick. For wildfire, `FirePhysicsModule` decides which cells catch fire.
 
 **How it works (simplified):**
 1. For each BURNING cell:
-   - Has it been burning long enough? → If yes, mark it BURNED (fire dies out)
+   - Has it been burning long enough? → If yes, return a BURNED `StateEvent`
    - For each UNBURNED neighbor:
-     - Calculate spread probability based on:
-       - **Wind**: Fire spreads faster downwind
-       - **Slope**: Fire spreads faster uphill
-       - **Fuel moisture**: Drier fuel catches easier
-       - **Vegetation**: More vegetation = more fuel
-       - **Humidity**: Low humidity = easier spread
-     - Roll the dice: if random() < probability → neighbor catches fire
+     - Calculate spread probability based on wind, slope, fuel moisture, vegetation, humidity
+     - Roll the dice: if random() < probability → return a BURNING `StateEvent`
+2. The engine applies all `StateEvent`s to the grid
 
-**Example spread probability calculation:**
-```
-Base probability: 0.15
-× Wind factor (downwind): 2.0
-× Slope factor (uphill): 1.3
-× Fuel moisture factor (dry): 1.4
-× Vegetation factor (dense): 1.2
-× Humidity factor (low): 1.3
-─────────────────────────────
-= 0.15 × 2.0 × 1.3 × 1.4 × 1.2 × 1.3 = 0.94
-
-→ 94% chance this cell catches fire this tick
-```
-
-**Important:** This is a **placeholder** model. It's good enough for testing AI agents, but it's not real wildfire physics. You can swap it out for a real model (like Rothermel) by implementing the `FireSpreadModule` interface.
+**The physics module is pluggable** — you can swap in a different physics implementation (e.g., Rothermel fire spread model) by subclassing `PhysicsModule[FireCellState]`.
 
 ---
 
 ## Putting It All Together: The World Engine
 
-The `WorldEngine` coordinates everything. Each tick:
+`GenericWorldEngine[FireCellState]` coordinates everything. Each tick:
 
-1. **Weather evolves** (temperature drifts, wind shifts)
-2. **Fire spread module runs** (computes which cells ignite or extinguish)
-3. **Fire events are applied** to the grid
+1. **Environment evolves** (temperature drifts, wind shifts)
+2. **Physics module runs** (computes `StateEvent`s)
+3. **State events are applied** to the grid
 4. **Ground truth snapshot is saved** (the answer key)
 
 **Example:**
 ```python
-from ogar.world.engine import WorldEngine
-from ogar.world.grid import TerrainGrid
-from ogar.world.weather import WeatherState
-from ogar.world.fire_spread.heuristic import FireSpreadHeuristic
+from ogar.domains.wildfire.physics import FirePhysicsModule
+from ogar.domains.wildfire.environment import FireEnvironmentState
+from ogar.domains.wildfire.cell_state import FireCellState, TerrainType
+from ogar.world.generic_engine import GenericWorldEngine
+from ogar.world.generic_grid import GenericTerrainGrid
 
-# 1. Create the terrain
-grid = TerrainGrid(rows=10, cols=10)
-grid.get_cell(5, 5).ignite(tick=0, intensity=0.8)  # Start a fire
+# 1. Create the physics module and grid
+physics = FirePhysicsModule()
+grid = GenericTerrainGrid(rows=10, cols=10, initial_state_factory=physics.initial_cell_state)
 
-# 2. Set the weather
-weather = WeatherState(temperature_c=35, humidity_pct=15, wind_speed_mps=8)
+# 2. Set the environment
+env = FireEnvironmentState(temperature_c=35, humidity_pct=15, wind_speed_mps=8)
 
-# 3. Choose a fire spread model
-fire_module = FireSpreadHeuristic()
+# 3. Create the engine
+engine = GenericWorldEngine(grid=grid, environment=env, physics=physics)
 
-# 4. Create the engine
-engine = WorldEngine(grid=grid, weather=weather, fire_spread=fire_module)
+# 4. Ignite cell (5, 5)
+ignited = engine.grid.get_cell(5, 5).cell_state.ignited(tick=0, intensity=0.8)
+engine.inject_state(5, 5, ignited)
 
 # 5. Run the simulation
 for tick in range(60):
     snapshot = engine.tick()
-    print(f"Tick {tick}: {snapshot.summary['burning_cells']} cells burning")
+    print(f"Tick {tick}: {snapshot.domain_summary['burning_cells']} cells burning")
 ```
 
 **Output:**
@@ -188,11 +185,11 @@ Tick 3: 7 cells burning
 
 **Ground truth** = what's *actually* happening in the simulation.
 
-After each tick, the engine saves a `GroundTruthSnapshot`:
-- Which cells are burning
-- Fire intensity in each cell
-- Weather conditions
-- Summary stats (how many cells unburned/burning/burned)
+After each tick, the engine saves a `GenericGroundTruthSnapshot`:
+- `tick` — simulation tick number
+- `environment` — weather conditions as a dict
+- `domain_summary` — physics-specific summary (burning cells, intensity map, cell counts)
+- `grid_summary` — cell counts by label (`{"BURNING": 3, "BURNED": 1, "UNBURNED": 96}`)
 
 **The AI agents never see this.** They only see **sensor readings**, which are:
 - **Noisy**: A thermometer might read 34°C when it's actually 35°C
@@ -213,7 +210,7 @@ This is how you evaluate whether your agent is good at detecting fires.
 Instead of building a grid from scratch every time, you can use pre-built scenarios:
 
 ```python
-from ogar.world.scenarios.wildfire_basic import create_basic_wildfire
+from ogar.domains.wildfire.scenarios import create_basic_wildfire
 
 # Get a fully configured engine ready to run
 engine = create_basic_wildfire()
@@ -278,17 +275,18 @@ The engine is **pure simulation**. It does NOT:
 
 **Sensors are separate.** They hold a reference to the engine and sample from it:
 ```python
-from ogar.sensors.temperature import TemperatureSensor
+from ogar.domains.wildfire.sensors import TemperatureSensor
 
 sensor = TemperatureSensor(
-    sensor_id="temp-001",
+    source_id="temp-001",
     cluster_id="cluster-north",
-    position=(2, 3),  # Grid coordinates
-    engine=engine     # Reference to the world
+    engine=engine,   # Reference to the world
+    grid_row=2,
+    grid_col=3,
 )
 
 # After each tick, the sensor can sample the world
-reading = sensor.sample()
+event = sensor.emit()
 # → SensorEvent with temperature reading (possibly noisy)
 ```
 
@@ -307,18 +305,20 @@ Now that you understand the World Engine, the next tutorial will cover:
 
 ### Create a simple world
 ```python
-from ogar.world.engine import WorldEngine
-from ogar.world.grid import TerrainGrid
-from ogar.world.weather import WeatherState
-from ogar.world.fire_spread.heuristic import FireSpreadHeuristic
+from ogar.domains.wildfire.physics import FirePhysicsModule
+from ogar.domains.wildfire.environment import FireEnvironmentState
+from ogar.domains.wildfire.cell_state import FireCellState
+from ogar.world.generic_engine import GenericWorldEngine
+from ogar.world.generic_grid import GenericTerrainGrid
 
-grid = TerrainGrid(rows=10, cols=10)
-grid.get_cell(5, 5).ignite(tick=0, intensity=0.8)
+physics = FirePhysicsModule()
+grid = GenericTerrainGrid(rows=10, cols=10, initial_state_factory=physics.initial_cell_state)
+env = FireEnvironmentState(temperature_c=35, humidity_pct=15, wind_speed_mps=8)
+engine = GenericWorldEngine(grid=grid, environment=env, physics=physics)
 
-weather = WeatherState(temperature_c=35, humidity_pct=15, wind_speed_mps=8)
-fire_module = FireSpreadHeuristic()
-
-engine = WorldEngine(grid=grid, weather=weather, fire_spread=fire_module)
+# Ignite a cell
+ignited = engine.grid.get_cell(5, 5).cell_state.ignited(tick=0, intensity=0.8)
+engine.inject_state(5, 5, ignited)
 ```
 
 ### Run the simulation
@@ -331,12 +331,12 @@ snapshots = engine.run(ticks=60)
 
 # Access current state
 current_grid = engine.grid
-current_weather = engine.weather
+current_env = engine.environment
 ```
 
 ### Use a pre-built scenario
 ```python
-from ogar.world.scenarios.wildfire_basic import create_basic_wildfire
+from ogar.domains.wildfire.scenarios import create_basic_wildfire
 
 engine = create_basic_wildfire()
 engine.run(ticks=60)

@@ -7,10 +7,11 @@ Seeding random ensures deterministic results across all test modules.
 import random
 import pytest
 
-from ogar.world.grid import TerrainGrid, TerrainType, Cell, FireState
-from ogar.world.weather import WeatherState
-from ogar.world.fire_spread.heuristic import FireSpreadHeuristic
-from ogar.world.engine import WorldEngine
+from ogar.domains.wildfire.cell_state import FireCellState, FireState, TerrainType
+from ogar.domains.wildfire.environment import FireEnvironmentState
+from ogar.domains.wildfire.physics import FirePhysicsModule
+from ogar.world.generic_engine import GenericWorldEngine
+from ogar.world.generic_grid import GenericTerrainGrid
 from ogar.transport.schemas import SensorEvent
 
 
@@ -22,15 +23,20 @@ def seed_random():
 
 
 @pytest.fixture
-def small_grid() -> TerrainGrid:
-    """A 5x5 grassland grid with default settings."""
-    return TerrainGrid(rows=5, cols=5)
+def fire_physics() -> FirePhysicsModule:
+    return FirePhysicsModule(base_probability=0.15, burn_duration_ticks=5)
 
 
 @pytest.fixture
-def weather() -> WeatherState:
+def small_grid(fire_physics) -> GenericTerrainGrid:
+    """A 5x5 grassland grid using FireCellState."""
+    return GenericTerrainGrid(rows=5, cols=5, initial_state_factory=fire_physics.initial_cell_state)
+
+
+@pytest.fixture
+def fire_environment() -> FireEnvironmentState:
     """Hot, dry, windy weather — ideal for fire spread tests."""
-    return WeatherState(
+    return FireEnvironmentState(
         temperature_c=38.0,
         humidity_pct=12.0,
         wind_speed_mps=8.0,
@@ -40,14 +46,9 @@ def weather() -> WeatherState:
 
 
 @pytest.fixture
-def fire_spread() -> FireSpreadHeuristic:
-    return FireSpreadHeuristic(base_probability=0.15, burn_duration_ticks=5)
-
-
-@pytest.fixture
-def engine(small_grid, weather, fire_spread) -> WorldEngine:
-    """A WorldEngine with a 5x5 grid, hot/dry weather, and heuristic fire spread."""
-    return WorldEngine(grid=small_grid, weather=weather, fire_spread=fire_spread)
+def engine(small_grid, fire_environment, fire_physics) -> GenericWorldEngine:
+    """A GenericWorldEngine with a 5x5 grid, hot/dry weather, and fire physics."""
+    return GenericWorldEngine(grid=small_grid, environment=fire_environment, physics=fire_physics)
 
 
 @pytest.fixture

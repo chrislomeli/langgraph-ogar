@@ -58,7 +58,7 @@ from ogar.sensors.base import SensorBase
 
 class MyCustomSensor(SensorBase):
     source_type = "my_sensor_type"
-    
+
     def read(self) -> dict:
         # Return domain-specific payload
         return {"my_reading": 42.0}
@@ -70,38 +70,40 @@ That's it! The base class handles everything else.
 
 ### 2. **Concrete Sensor Types**
 
-Six sensor types are implemented in `world_sensors.py`:
+Six sensor types are implemented in `ogar.domains.wildfire.sensors`:
 
 #### **TemperatureSensor**
 Reads ambient temperature + heat from nearby fires.
 
 ```python
-from ogar.sensors.world_sensors import TemperatureSensor
+from ogar.domains.wildfire.sensors import TemperatureSensor
 
 sensor = TemperatureSensor(
     source_id="temp-001",
     cluster_id="cluster-north",
-    engine=engine,          # Reference to WorldEngine
+    engine=engine,          # Reference to GenericWorldEngine
     grid_row=5,             # Sensor position on grid
     grid_col=6,
     noise_std=0.5           # Gaussian noise (°C)
 )
 
 event = sensor.emit()
-# → SensorEvent with payload: {"celsius": 43.2}
+# → SensorEvent with payload: {"celsius": 43.2, "unit": "C"}
 ```
 
 **How it works:**
-1. Reads base temperature from `engine.weather.temperature_c`
+1. Reads base temperature from `engine.environment.temperature_c`
 2. Checks nearby cells for burning fires
 3. Adds heat boost based on fire intensity and distance
 4. Adds Gaussian noise (`noise_std`)
-5. Returns `{"celsius": final_temp}`
+5. Returns `{"celsius": final_temp, "unit": "C"}`
 
 #### **HumiditySensor**
-Reads relative humidity from weather.
+Reads relative humidity from the environment.
 
 ```python
+from ogar.domains.wildfire.sensors import HumiditySensor
+
 sensor = HumiditySensor(
     source_id="humid-001",
     cluster_id="cluster-north",
@@ -117,11 +119,14 @@ event = sensor.emit()
 Reads wind speed and direction.
 
 ```python
+from ogar.domains.wildfire.sensors import WindSensor
+
 sensor = WindSensor(
     source_id="wind-001",
     cluster_id="cluster-north",
     engine=engine,
-    noise_std=0.3  # m/s
+    speed_noise_std=0.3,      # m/s
+    direction_noise_std=5.0   # degrees
 )
 
 event = sensor.emit()
@@ -129,32 +134,35 @@ event = sensor.emit()
 ```
 
 #### **SmokeSensor**
-Detects smoke based on nearby fire intensity and wind direction.
+Detects smoke based on nearby fire intensity.
 
 ```python
+from ogar.domains.wildfire.sensors import SmokeSensor
+
 sensor = SmokeSensor(
     source_id="smoke-001",
     cluster_id="cluster-north",
     engine=engine,
     grid_row=5,
     grid_col=6,
-    noise_std=10.0  # ppm
+    noise_std=10.0  # µg/m³
 )
 
 event = sensor.emit()
-# → payload: {"density_ppm": 245}
+# → payload: {"pm25_ugm3": 245.0}
 ```
 
 **How it works:**
 - Checks nearby burning cells
-- Smoke drifts downwind (uses wind vector)
 - Higher fire intensity → more smoke
-- Returns particulate density in parts-per-million
+- Returns particulate density in µg/m³ (PM2.5)
 
 #### **BarometricSensor**
 Reads atmospheric pressure.
 
 ```python
+from ogar.domains.wildfire.sensors import BarometricSensor
+
 sensor = BarometricSensor(
     source_id="baro-001",
     cluster_id="cluster-north",
@@ -170,6 +178,8 @@ event = sensor.emit()
 Reads a heat grid from a rectangular region.
 
 ```python
+from ogar.domains.wildfire.sensors import ThermalCameraSensor
+
 sensor = ThermalCameraSensor(
     source_id="thermal-001",
     cluster_id="cluster-north",
@@ -183,7 +193,7 @@ sensor = ThermalCameraSensor(
 
 event = sensor.emit()
 # → payload: {
-#     "heat_grid": [
+#     "grid_celsius": [
 #       [35.2, 36.1, 38.4, 37.9],
 #       [34.8, 42.3, 51.2, 45.6],  ← Hot spot detected
 #       [35.1, 39.8, 48.7, 43.2],
@@ -232,7 +242,7 @@ SensorEvent(
     timestamp=datetime(2024, 1, 15, 14, 30, 0, tzinfo=timezone.utc),
     sim_tick=42,
     confidence=0.95,
-    payload={"celsius": 43.2},
+    payload={"celsius": 43.2, "unit": "C"},
     metadata={"firmware_version": "2.1.3"}
 )
 ```
@@ -342,8 +352,8 @@ sensor = TemperatureSensor(
 
 ```python
 import random
-from ogar.world.scenarios.wildfire_basic import create_basic_wildfire
-from ogar.sensors.world_sensors import (
+from ogar.domains.wildfire.scenarios import create_basic_wildfire
+from ogar.domains.wildfire.sensors import (
     TemperatureSensor,
     SmokeSensor,
     WindSensor,
@@ -385,7 +395,6 @@ sensors = [
         source_id="wind-north-1",
         cluster_id="cluster-north",
         engine=engine,
-        noise_std=0.3,
     ),
 ]
 
@@ -412,17 +421,14 @@ while not queue.empty():
 
 **Output:**
 ```
-Tick 0: temp-north-1 → {'celsius': 34.8}
-Tick 0: temp-north-2 → {'celsius': 35.2}
-Tick 0: smoke-north-1 → {'density_ppm': 0}
+Tick 0: temp-north-1 → {'celsius': 34.8, 'unit': 'C'}
+Tick 0: temp-north-2 → {'celsius': 35.2, 'unit': 'C'}
+Tick 0: smoke-north-1 → {'pm25_ugm3': 0.0}
 Tick 0: wind-north-1 → {'speed_mps': 8.1, 'direction_deg': 227}
-Tick 1: temp-north-1 → {'celsius': 35.1}
-Tick 1: temp-north-2 → {'celsius': 35.4}
-Tick 1: smoke-north-1 → {'density_ppm': 12}
-Tick 1: wind-north-1 → {'speed_mps': 7.9, 'direction_deg': 225}
+Tick 1: temp-north-1 → {'celsius': 35.1, 'unit': 'C'}
 ...
-Tick 15: temp-north-1 → {'celsius': 42.3}  ← Fire detected!
-Tick 15: smoke-north-1 → {'density_ppm': 245}
+Tick 15: temp-north-1 → {'celsius': 42.3, 'unit': 'C'}  ← Fire detected!
+Tick 15: smoke-north-1 → {'pm25_ugm3': 245.0}
 ```
 
 ---
@@ -467,7 +473,7 @@ Now that you understand sensors, the next tutorial will cover:
 
 ### Create a sensor
 ```python
-from ogar.sensors.world_sensors import TemperatureSensor
+from ogar.domains.wildfire.sensors import TemperatureSensor
 
 sensor = TemperatureSensor(
     source_id="temp-001",
@@ -510,10 +516,10 @@ publisher = SensorPublisher(
 await publisher.run(ticks=60)
 ```
 
-### Available sensor types
-- `TemperatureSensor` — ambient temp + fire heat
-- `HumiditySensor` — relative humidity
-- `WindSensor` — speed + direction
-- `SmokeSensor` — particulate density
-- `BarometricSensor` — atmospheric pressure
-- `ThermalCameraSensor` — heat grid (area view)
+### Available sensor types (from `ogar.domains.wildfire.sensors`)
+- `TemperatureSensor` — ambient temp + fire heat → `{"celsius": ..., "unit": "C"}`
+- `HumiditySensor` — relative humidity → `{"relative_humidity_pct": ...}`
+- `WindSensor` — speed + direction → `{"speed_mps": ..., "direction_deg": ...}`
+- `SmokeSensor` — particulate density → `{"pm25_ugm3": ...}`
+- `BarometricSensor` — atmospheric pressure → `{"pressure_hpa": ...}`
+- `ThermalCameraSensor` — heat grid → `{"grid_celsius": [[...]], "top_row": ..., "left_col": ...}`

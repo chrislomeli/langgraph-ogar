@@ -49,7 +49,7 @@ from ogar.sensors.base import SensorBase
 from ogar.transport.queue import SensorEventQueue
 
 if TYPE_CHECKING:
-    from ogar.world.engine import WorldEngine
+    from ogar.world.generic_engine import GenericWorldEngine
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ class SensorPublisher:
         sensors: List[SensorBase],
         queue: SensorEventQueue,
         tick_interval_seconds: float = 1.0,
-        engine: Optional["WorldEngine"] = None,
+        engine: Optional["GenericWorldEngine"] = None,
     ) -> None:
         """
         Parameters
@@ -85,8 +85,8 @@ class SensorPublisher:
         tick_interval_seconds : How long to wait between tick cycles.
                                 Default 1.0s = one tick per second.
                                 Set lower for faster scenario replay.
-        engine                : Optional WorldEngine.  When provided the
-                                publisher calls engine.tick() once before
+        engine                : Optional GenericWorldEngine.  When provided
+                                the publisher calls engine.tick() once before
                                 each sensor pass, advancing the simulation
                                 so sensors read fresh world state.
         """

@@ -454,8 +454,8 @@ This is how the supervisor scales to N clusters without blocking.
 
 ```python
 import asyncio
-from ogar.world.scenarios.wildfire_basic import create_basic_wildfire
-from ogar.sensors.world_sensors import TemperatureSensor, SmokeSensor
+from ogar.domains.wildfire.scenarios import create_basic_wildfire
+from ogar.domains.wildfire.sensors import TemperatureSensor, SmokeSensor
 from ogar.sensors.publisher import SensorPublisher
 from ogar.transport.queue import SensorEventQueue
 from ogar.bridge.consumer import EventBridgeConsumer
