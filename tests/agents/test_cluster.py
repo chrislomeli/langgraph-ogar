@@ -7,6 +7,8 @@ from ogar.agents.cluster.state import (
     AnomalyFinding,
     ClusterAgentState,
 )
+from langgraph.store.memory import InMemoryStore
+
 from ogar.agents.cluster.graph import (
     ingest_events,
     classify,
@@ -137,6 +139,42 @@ class TestReportFindings:
         result = report_findings(state)
         assert result == {}
 
+    def test_writes_findings_to_store(self):
+        store = InMemoryStore()
+        finding = {
+            "finding_id": "f-store-1",
+            "cluster_id": "cluster-north",
+            "anomaly_type": "threshold_breach",
+            "affected_sensors": ["temp-1"],
+            "confidence": 0.8,
+            "summary": "Temperature spike",
+            "raw_context": {},
+        }
+        state = _make_state(cluster_id="cluster-north", anomalies=[finding])
+        report_findings(state, store=store)
+
+        items = store.search(("incidents", "cluster-north"))
+        assert len(items) == 1
+        assert items[0].key == "f-store-1"
+        assert items[0].value["anomaly_type"] == "threshold_breach"
+
+    def test_no_store_is_safe(self):
+        # store=None should not raise
+        state = _make_state(anomalies=[{
+            "finding_id": "f2", "cluster_id": "c1",
+            "anomaly_type": "test", "affected_sensors": [],
+            "confidence": 0.5, "summary": "test", "raw_context": {},
+        }])
+        result = report_findings(state, store=None)
+        assert result == {}
+
+    def test_empty_anomalies_writes_nothing(self):
+        store = InMemoryStore()
+        state = _make_state(cluster_id="cluster-north", anomalies=[])
+        report_findings(state, store=store)
+        items = store.search(("incidents", "cluster-north"))
+        assert len(items) == 0
+
 
 class TestRouteAfterClassify:
     def test_routes_to_report_on_complete(self):
@@ -176,3 +214,13 @@ class TestClusterAgentGraph:
         state = _make_state(trigger_event=None)
         result = graph.invoke(state)
         assert result["status"] == "complete"
+
+    def test_invoke_with_store_writes_findings(self):
+        store = InMemoryStore()
+        graph = build_cluster_agent_graph(store=store)
+        state = _make_state(cluster_id="cluster-north")
+        graph.invoke(state)
+
+        # Stub classify always produces one finding — it should land in the store
+        items = store.search(("incidents", "cluster-north"))
+        assert len(items) == 1

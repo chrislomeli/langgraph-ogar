@@ -52,6 +52,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
+from langgraph.store.base import BaseStore
 from langgraph.types import Send
 
 from ogar.actuators.base import ActuatorCommand
@@ -197,22 +198,38 @@ def run_cluster_agent(state: ClusterAgentState) -> dict:
     }
 
 
-def assess_situation(state: SupervisorState) -> dict:
+def assess_situation(state: SupervisorState, store: Optional[BaseStore] = None) -> dict:
     """
     Stub assess_situation node — used when no LLM is provided.
 
-    Produces a placeholder summary from the aggregated findings.
+    Reads past incidents from the Store (if available) so the summary
+    reflects historical context, not just the current run's findings.
+
+    Store read:
+      namespace : ("incidents", cluster_id) for each active cluster
+      Returns   : all Item objects — item.value is the AnomalyFinding dict
     """
     findings = state.get("cluster_findings", [])
+    cluster_ids = state.get("active_cluster_ids", [])
+
+    # ── Read past incidents from store ───────────────────────────────────────
+    past_count = 0
+    if store is not None:
+        for cid in cluster_ids:
+            items = store.search(("incidents", cid))
+            past_count += len(items)
+
     logger.info(
-        "Supervisor assess_situation — STUB — %d finding(s) from clusters",
+        "Supervisor assess_situation — STUB — %d current finding(s), "
+        "%d past incident(s) in store",
         len(findings),
+        past_count,
     )
 
     summary = (
         f"[STUB] Received {len(findings)} finding(s) from "
-        f"{len(state.get('active_cluster_ids', []))} cluster(s). "
-        "Cross-cluster correlation not yet implemented."
+        f"{len(cluster_ids)} cluster(s). "
+        f"Store contains {past_count} past incident(s) across all clusters."
     )
 
     return {
@@ -238,12 +255,15 @@ def decide_actions(state: SupervisorState) -> dict:
 
 # ── LLM-backed node factories ────────────────────────────────────────────────
 
-def _make_assess_llm_node(llm_with_tools: BaseChatModel):
+def _make_assess_llm_node(llm_with_tools: BaseChatModel, store: Optional[BaseStore] = None):
     """
     Factory that returns an assess_situation node backed by an LLM.
 
     The LLM uses supervisor tools to examine findings across clusters,
     then produces a structured situation assessment.
+
+    When store is provided, past incidents are loaded and appended to the
+    user message so the LLM can reason about historical patterns.
     """
 
     def assess_situation_llm(state: SupervisorState) -> dict:
@@ -274,11 +294,30 @@ def _make_assess_llm_node(llm_with_tools: BaseChatModel):
                     f"  [{f['anomaly_type']}] cluster={f['cluster_id']} "
                     f"conf={f['confidence']:.2f} — {f['summary'][:80]}"
                 )
+
+            # ── Load past incidents from store ────────────────────────
+            # Gives the LLM historical context: "have we seen this before?"
+            past_lines = []
+            if store is not None:
+                for cid in cluster_ids:
+                    items = store.search(("incidents", cid))
+                    for item in items[-10:]:   # last 10 per cluster
+                        v = item.value
+                        past_lines.append(
+                            f"  [PAST][{v.get('cluster_id', cid)}] "
+                            f"{v.get('anomaly_type', '?')} "
+                            f"conf={v.get('confidence', 0):.2f} — "
+                            f"{v.get('summary', '')[:80]}"
+                        )
+
             user_content = (
                 f"Active clusters: {', '.join(cluster_ids)}\n"
                 f"Total findings: {len(findings)}\n"
                 f"Findings:\n" + "\n".join(finding_lines)
             )
+            if past_lines:
+                user_content += "\n\nPast incidents (from store):\n" + "\n".join(past_lines)
+
             user_msg = HumanMessage(content=user_content)
             messages = [sys_msg, user_msg]
 
@@ -441,14 +480,38 @@ def _parse_commands(state: SupervisorState) -> dict:
     }
 
 
-def dispatch_commands(state: SupervisorState) -> dict:
+def dispatch_commands(state: SupervisorState, store: Optional[BaseStore] = None) -> dict:
     """
-    Send actuator commands — placeholder for real actuator dispatch.
+    Send actuator commands and write the situation summary to the Store.
 
-    TODO: Wire to ActuatorRegistry or publish to commands.actuators Kafka topic.
+    Store write (when store is provided):
+      namespace : ("situations", "global")
+      key       : ISO timestamp of this run (sortable, unique enough for a demo)
+      value     : situation summary + command count for future recall
+
+    The supervisor reads ("situations", "global") in future runs to understand
+    what decisions were made previously — useful for avoiding duplicate alerts
+    and for the LLM to reason about escalation patterns.
+
+    TODO: Wire commands to Kafka commands.actuators topic.
     """
     commands = state.get("pending_commands", [])
+    summary = state.get("situation_summary", "")
     logger.info("Supervisor dispatching %d command(s)", len(commands))
+
+    if store is not None and summary:
+        from datetime import datetime, timezone
+        ts = datetime.now(timezone.utc).isoformat()
+        store.put(
+            ("situations", "global"),
+            ts,
+            {
+                "situation_summary": summary,
+                "command_count": len(commands),
+                "command_types": [c.command_type for c in commands],
+            },
+        )
+        logger.info("Supervisor wrote situation summary to store")
 
     return {"status": "complete"}
 
@@ -506,31 +569,48 @@ def route_after_decide(
 
 def build_supervisor_graph(
     llm: Optional[BaseChatModel] = None,
+    store: Optional[BaseStore] = None,
 ):
     """
     Compile and return the supervisor graph.
 
     Parameters
     ──────────
-    llm : Optional LangChain chat model.  When provided, assess_situation
-          and decide_actions use LLM + ToolNode in a ReAct loop.  When
-          None (default), deterministic stubs are used instead.
+    llm   : Optional LangChain chat model.  When provided, assess_situation
+            and decide_actions use LLM + ToolNode in a ReAct loop.  When
+            None (default), deterministic stubs are used instead.
+    store : Optional LangGraph Store.  When provided:
+              - assess_situation reads past incidents from ("incidents", cluster_id)
+              - dispatch_commands writes situation summary to ("situations", "global")
+            Pass the same store instance used by the cluster agent graphs so
+            they share the same incident history.
+
+    Store architecture note
+    ───────────────────────
+    The supervisor does NOT pass the store to its internal cluster agent
+    invocations (run_cluster_agent).  Those run with empty sensor events and
+    exist only for cross-cluster correlation — writing stub findings from
+    them would pollute the store.  Only cluster agents invoked by the bridge
+    consumer (with real sensor data) write to the store.
     """
     builder = StateGraph(SupervisorState)
 
     # ── Always-present nodes ─────────────────────────────────────────
-    builder.add_node("fan_out_to_clusters", fan_out_to_clusters)
     builder.add_node("run_cluster_agent", run_cluster_agent)
     builder.add_node("dispatch_commands", dispatch_commands)
 
-    builder.add_edge(START, "fan_out_to_clusters")
+    # fan_out_to_clusters returns List[Send] — it must be a conditional
+    # edge routing function, NOT a regular node.  LangGraph interprets
+    # the returned Send objects as parallel node dispatches.
+    builder.add_conditional_edges(START, fan_out_to_clusters, ["run_cluster_agent"])
 
     if llm is not None:
         # ── LLM mode ─────────────────────────────────────────────────
         llm_with_tools = llm.bind_tools(SUPERVISOR_TOOLS)
 
         # Assess phase: LLM + tool loop → parse_assessment
-        builder.add_node("assess_situation", _make_assess_llm_node(llm_with_tools))
+        # Pass store to the factory so the LLM sees past incidents in its prompt.
+        builder.add_node("assess_situation", _make_assess_llm_node(llm_with_tools, store=store))
         builder.add_node("assess_tool_node", ToolNode(SUPERVISOR_TOOLS))
         builder.add_node("parse_assessment", _parse_assessment)
 
@@ -553,6 +633,9 @@ def build_supervisor_graph(
         logger.info("Supervisor graph compiled (LLM mode)")
     else:
         # ── Stub mode ────────────────────────────────────────────────
+        # assess_situation and dispatch_commands are top-level functions whose
+        # signatures include `store: Optional[BaseStore] = None`.
+        # LangGraph injects the store automatically at runtime.
         builder.add_node("assess_situation", assess_situation)
         builder.add_node("decide_actions", decide_actions)
 
@@ -565,5 +648,5 @@ def build_supervisor_graph(
 
     builder.add_edge("dispatch_commands", END)
 
-    compiled = builder.compile()
+    compiled = builder.compile(store=store)
     return compiled

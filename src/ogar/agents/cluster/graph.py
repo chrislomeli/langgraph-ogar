@@ -44,6 +44,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
+from langgraph.store.base import BaseStore
 
 from ogar.agents.cluster.state import AnomalyFinding, ClusterAgentState
 from ogar.tools.sensor_tools import SENSOR_TOOLS, clear_tool_state, set_tool_state
@@ -268,27 +269,46 @@ def _parse_llm_findings(state: ClusterAgentState) -> dict:
     }
 
 
-def report_findings(state: ClusterAgentState) -> dict:
+def report_findings(state: ClusterAgentState, store: Optional[BaseStore] = None) -> dict:
     """
-    Final node — packages anomalies for the supervisor to read.
+    Final node — packages anomalies for the supervisor and writes them to
+    the cross-agent Store so the supervisor can recall past incidents.
 
-    In the supervisor, when it invokes this subgraph via Send API,
-    it maps the subgraph's output state back to its own state.
-    The supervisor reads state["anomalies"] from each cluster agent
-    and aggregates them.
+    Store write (when store is provided):
+      namespace : ("incidents", cluster_id)
+      key       : finding_id  (UUID — stable across restarts with pgvector)
+      value     : the full AnomalyFinding dict
 
-    This node is currently a pass-through — it just logs.
-    In a real implementation it might:
-      - Filter out low-confidence anomalies
-      - Deduplicate against recently reported findings
-      - Write to the LangGraph Store for cross-agent memory
+    The supervisor reads from ("incidents", cluster_id) in assess_situation
+    to build context before making a decision.  This is the primary mechanism
+    for cross-agent memory — cluster agents write, supervisor reads.
+
+    Deduplication is handled by key: writing the same finding_id twice is a
+    no-op (last write wins, same value).
     """
     anomalies = state.get("anomalies", [])
+    cluster_id = state.get("cluster_id", "unknown")
+
     logger.info(
         "ClusterAgent[%s] reporting %d finding(s) to supervisor",
-        state.get("cluster_id"),
+        cluster_id,
         len(anomalies),
     )
+
+    if store is not None and anomalies:
+        for finding in anomalies:
+            store.put(
+                ("incidents", cluster_id),
+                finding["finding_id"],
+                finding,
+            )
+        logger.info(
+            "ClusterAgent[%s] wrote %d finding(s) to store namespace ('incidents', '%s')",
+            cluster_id,
+            len(anomalies),
+            cluster_id,
+        )
+
     # No state change needed — anomalies are already in state
     return {}
 
@@ -338,15 +358,20 @@ def route_after_classify_llm(
 
 def build_cluster_agent_graph(
     llm: Optional[BaseChatModel] = None,
+    store: Optional[BaseStore] = None,
 ):
     """
     Compile and return the cluster agent subgraph.
 
     Parameters
     ──────────
-    llm : Optional LangChain chat model.  When provided, the classify
-          node uses LLM + ToolNode in a ReAct loop.  When None (default),
-          a deterministic stub classify is used instead.
+    llm   : Optional LangChain chat model.  When provided, the classify
+            node uses LLM + ToolNode in a ReAct loop.  When None (default),
+            a deterministic stub classify is used instead.
+    store : Optional LangGraph Store.  When provided, report_findings writes
+            each AnomalyFinding to ("incidents", cluster_id) so the supervisor
+            can recall past incidents across runs.
+            Pass InMemoryStore for dev, AsyncPostgresStore for production.
 
     Returns a compiled LangGraph graph ready for .invoke() or .stream().
 
@@ -395,7 +420,10 @@ def build_cluster_agent_graph(
 
     builder.add_edge("report_findings", END)
 
-    compiled = builder.compile()
+    # Passing store=store makes LangGraph inject it into any node whose
+    # signature includes `store: Optional[BaseStore]`.
+    # store=None is safe — nodes receive None and guard against it.
+    compiled = builder.compile(store=store)
     return compiled
 
 
