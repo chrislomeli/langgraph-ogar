@@ -50,6 +50,9 @@ class CellState(BaseModel, ABC):
           def summary_label(self) -> str:
               return self.fire_state.value
     """
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(row={self.row}, col={self.col})"
+
 
     @abstractmethod
     def summary_label(self) -> str:
